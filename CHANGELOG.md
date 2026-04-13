@@ -3,6 +3,47 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.2.2] — 2026-04-13
+
+### Changed
+
+- **`install-rules` command** now writes to three targets instead of
+  one, so the rules are binding on the AI agent at runtime instead
+  of sitting in a docs file the agent may never read:
+  1. `docs/DEVELOPMENT-RULES.md` — full human-readable reference
+     (unchanged behavior, existing files backed up with timestamp)
+  2. `.specify/memory/constitution.md` — spec-kit constitution, read
+     by every spec-kit-aware agent at session start. Appends a
+     `## Development Rules` section with the 8 key principles and
+     a pointer to the full doc. Safe to re-run — skips if the
+     section already exists unless `--force` is passed.
+  3. Agent-specific context file — detected from
+     `.specify/init-options.json` and mapped per agent:
+     - `claude` → `CLAUDE.md`
+     - `copilot` → `.github/copilot-instructions.md`
+     - `gemini` → `GEMINI.md`
+     - `cursor` / `cursor-agent` → `.cursorrules`
+     - `windsurf` → `.windsurfrules`
+     - everything else → `AGENTS.md` (the emerging cross-agent convention)
+
+- **New helper script** `scripts/bash/install-rules.sh` performs the
+  three-target writes atomically. Detects the project name from
+  `.specify/init-options.json` or the current directory name.
+  Accepts `--docs`, `--project-name`, and `--force` flags. Prints a
+  summary box showing which files were created, appended, or skipped.
+
+### Added
+
+- **Three new tests** under `tests/install-rules/`:
+  - `writes-three-targets.sh` — claude agent, verifies all three
+    files are written and project name is substituted into the docs
+  - `agent-fallback.sh` — unknown/generic agent, verifies fallback to
+    `AGENTS.md` and constitution creation from scratch
+  - `idempotent-append.sh` — running twice doesn't duplicate the
+    `## Development Rules` section in the constitution or agent file
+
+Test suite is now 8 tests (was 5). All pass.
+
 ## [0.2.1] — 2026-04-13
 
 ### Added

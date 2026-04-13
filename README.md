@@ -10,7 +10,7 @@
 
 [![Spec Kit Extension](https://img.shields.io/badge/spec--kit-extension-7c3aed)](https://github.com/github/spec-kit)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.1-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.2-green)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Made by TEKIMAX](https://img.shields.io/badge/made%20by-TEKIMAX-fbbf24)](https://tekimax.com)
 
@@ -64,7 +64,7 @@ specify extension add --dev /path/to/speckit-security
 
 # 3. Verify
 specify extension list
-# → ✓ TEKIMAX Secure SDD (v0.2.1)
+# → ✓ TEKIMAX Secure SDD (v0.2.2)
 #       Security-first extension for Spec Kit
 #       Commands: 8 | Hooks: 5 | Status: Enabled
 ```

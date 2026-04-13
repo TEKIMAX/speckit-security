@@ -1,14 +1,16 @@
 ---
-description: "Install a DEVELOPMENT-RULES.md into the user's project with commit, file-structure, code-org, naming, docs, and test rules"
+description: "Install development rules into the project — writes docs/DEVELOPMENT-RULES.md, appends to .specify/memory/constitution.md, and writes the agent-specific context file"
+scripts:
+  sh: .specify/extensions/tekimax-security/scripts/bash/install-rules.sh
 ---
 
 # Install Development Rules
 
-Copy the `speckit-security` development rules template into the user's
-project so their team inherits the same discipline: clean commit
-messages, hooks-in-hooks-directory, DRY, helper extraction, file length
-limits, naming conventions, inline documentation for intent, and
-incremental unit test requirements.
+Install the speckit-security development discipline into the user's
+project so both humans and the active AI agent inherit it. The rules
+cover commit messages, file structure, DRY, helper extraction, file
+length, naming, inline documentation, unit test requirements, and the
+review checklist.
 
 ## User Input
 
@@ -16,68 +18,80 @@ $ARGUMENTS
 
 ## Context
 
-The rules are opinionated but stack-agnostic and have been battle-tested
-on this extension's own codebase. The goal is to raise the baseline
-engineering discipline of any project adopting `speckit-security`
-without forcing them to invent conventions from scratch.
+Writing the rules to a single `docs/` file is not enough — the AI
+agent only reads files it's explicitly directed to. To make the rules
+*binding* at runtime, they also need to land in the spec-kit
+constitution (which every spec-kit-aware agent reads at session start)
+and in the agent's native system-context file.
+
+This command delegates to a bash helper that handles all three writes
+atomically, detects the active agent from `.specify/init-options.json`,
+and safely appends to existing files without clobbering them.
 
 ## Steps
 
-1. **Locate the project root** — the directory containing `.specify/`.
+1. Run the installer script:
 
-2. **Determine the target path** — default is `docs/DEVELOPMENT-RULES.md`
-   at the project root. If the user passed a path in `$ARGUMENTS`, use
-   that instead.
-
-3. **Check for an existing file at the target path.** If one exists:
-   - **Do not overwrite silently.** Back it up to
-     `<target>.backup-<date>.md` and note the backup path.
-   - Or exit and ask the user to confirm overwrite.
-
-4. **Read the template** from
-   `.specify/extensions/tekimax-security/templates/development-rules.md`.
-
-5. **Substitute variables** in the template:
-   - `{{PROJECT_NAME}}` → the project name from `.specify/init-options.json`
-     or the directory name if the JSON isn't present.
-
-6. **Write the rendered file** to the target path. Create the `docs/`
-   directory if it doesn't exist.
-
-7. **Update the project's `CONTRIBUTING.md` if present** to add a
-   reference:
-
-   ```markdown
-   ## Development Rules
-
-   See [docs/DEVELOPMENT-RULES.md](docs/DEVELOPMENT-RULES.md) for the
-   full development discipline — commit messages, file structure,
-   code organization, naming, documentation, and unit test rules.
+   ```bash
+   bash {SCRIPT}
    ```
 
-   If no `CONTRIBUTING.md` exists, skip this step and note it in the
-   output.
+   Optional arguments:
+   - `--docs <path>` — override the default `docs/DEVELOPMENT-RULES.md` target
+   - `--project-name <name>` — override project name detection
+   - `--force` — replace an existing `## Development Rules` section
+     in the constitution or agent context file instead of skipping it
 
-8. **Print a summary** of what was installed:
+2. The script performs three writes:
 
-   ```
-   ✓ Installed DEVELOPMENT-RULES.md at docs/DEVELOPMENT-RULES.md
-   ✓ Added reference in CONTRIBUTING.md
+   **Target 1 — `docs/DEVELOPMENT-RULES.md`**
 
-   Next steps:
-     1. Review the rules and customize §5 (naming) for your language
-     2. Remove any sections that don't apply (e.g. bash-specific rules
-        for a TypeScript project)
-     3. Commit the file
-     4. Link it from your CONTRIBUTING.md if you don't already
-   ```
+   Full human-readable rules. Template is copied from
+   `.specify/extensions/tekimax-security/templates/development-rules.md`
+   with `{{PROJECT_NAME}}` substituted. Existing files are backed up
+   with a timestamped suffix before being overwritten.
+
+   **Target 2 — `.specify/memory/constitution.md`**
+
+   Spec-kit's project constitution. Every spec-kit-aware agent reads
+   this at session start, so rules written here bind every agent the
+   user interacts with. The script appends a `## Development Rules`
+   section with the key principles (short form) and a pointer to the
+   full doc. If the section already exists, the script skips it
+   unless `--force` was passed.
+
+   **Target 3 — Agent-specific context file**
+
+   The agent is detected from `.specify/init-options.json` (`ai`
+   field). The script maps the agent to its native context file:
+
+   | Agent | File |
+   |---|---|
+   | `claude` | `CLAUDE.md` |
+   | `copilot` | `.github/copilot-instructions.md` |
+   | `gemini` | `GEMINI.md` |
+   | `cursor` / `cursor-agent` | `.cursorrules` |
+   | `windsurf` | `.windsurfrules` |
+   | `opencode`, `codex`, `kiro-cli`, and everything else | `AGENTS.md` |
+
+   The same short-form rules section is appended to the detected
+   context file. Same safety rules as the constitution: skip if
+   section exists, unless `--force`.
+
+3. The script prints a summary box with the three target paths and
+   whether each was created, appended, or skipped.
+
+4. If the user wants to review before committing, they can diff the
+   three files against the backups or against their git index.
 
 ## Rules
 
-- **Never overwrite an existing file without backing it up.**
-- **Never modify files outside the project root.**
-- **Leave a visible note** in the installed file indicating which
-  command installed it and that it can be freely customized.
-- The installed rules are **a starting point**, not a straitjacket.
-  Teams are expected to adapt them to their language, framework, and
-  conventions.
+- **Never silently overwrite.** The full `docs/DEVELOPMENT-RULES.md`
+  is backed up before replacement; the constitution and agent context
+  files are append-only unless `--force` is passed.
+- **Never modify files outside the project root.** The script uses
+  relative paths and refuses to write to absolute paths.
+- **Detect the agent correctly.** If `.specify/init-options.json` is
+  missing or malformed, default to `generic` + `AGENTS.md`.
+- **Print what changed.** The summary box is the contract — every run
+  tells the user exactly which files were touched.
