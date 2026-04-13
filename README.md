@@ -153,9 +153,12 @@ fill in:
 - **Monitoring** — drift, latency, cost
 
 Swap any of these in `tekimax-security-config.yml` to match your team's
-existing tools. Opinionated stack bindings and runtime middleware
-generators live in the commercial `tekimax-enterprise` extension —
-see below.
+existing tools. See [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) for
+the full customization guide (config file, template overrides, hook
+toggling, allowlists, env vars, and more).
+
+Opinionated stack bindings and runtime middleware generators live in
+the commercial `tekimax-enterprise` extension — see below.
 
 ---
 
