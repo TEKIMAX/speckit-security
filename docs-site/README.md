@@ -83,9 +83,9 @@ and pull request that touches `docs-site/**`. It:
 4. Runs `wrangler pages deploy out --project-name speckit-security-docs`
 5. On pull requests, comments on the PR with the preview URL
 
-Pushes to `main` deploy to production. Pull requests get a unique
-preview URL on the format
-`https://<commit-sha>.speckit-security-docs.pages.dev`.
+Pushes to `main` deploy to production at
+**https://speckit.tekimax.com**. Pull requests get a unique preview
+URL from the underlying Cloudflare Pages project.
 
 The workflow uses `concurrency:` so only one deploy is in flight per
 branch at a time — newer pushes cancel older in-progress runs.
