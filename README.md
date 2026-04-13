@@ -12,7 +12,7 @@
 
 [![Spec Kit Extension](https://img.shields.io/badge/spec--kit-extension-7c3aed)](https://github.com/github/spec-kit)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.4-green)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Docs](https://img.shields.io/badge/docs-speckit.tekimax.com-7c3aed)](https://speckit.tekimax.com)
 [![Tests](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml/badge.svg)](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml)

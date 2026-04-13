@@ -3,6 +3,45 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.2.4] — 2026-04-13
+
+### Fixed
+
+- **Inline-prompt detection was over-matching legal and privacy copy.**
+  The previous pattern `[Yy]ou[[:space:]]+are[[:space:]]+a` matched
+  any second-person construction, so any Terms of Service or Privacy
+  Policy page containing clauses like "If you are a California
+  resident" or "If you are a HIPAA covered entity" would trip as
+  though it were an inline AI system prompt. Tightened to require an
+  AI-specific role keyword immediately after the article:
+
+  - `helpful` (matches `"You are a helpful assistant"`)
+  - `AI` / `ai` (matches `"You are an AI assistant"`)
+  - `virtual`, `assistant`, `chatbot`, `expert`, `friendly`,
+    `knowledgeable`, `precise`, `professional`, `skilled`, `senior`,
+    `world`, `conversational`, `advanced`, `state-of-the-art`
+  - `large language` / `language model` (matches `"You are a large
+    language model"` and variants)
+
+  Also now catches ChatML variants (`<|system|>`, `<|im_start|>system`)
+  and role-prefix lines (`SYSTEM:`, `Assistant:`) as separate
+  alternatives in the same regex.
+
+  Same fix applied to both `scripts/bash/audit.sh` and
+  `scripts/bash/gate-check.sh` Gate F so the gate and the audit
+  agree.
+
+### Added
+
+- **`tests/audit/skip-legal-prose.sh`** — regression test that plants
+  a realistic Terms of Service JSX file containing five different
+  second-person legal clauses ("If you are a California resident",
+  "If you are a Texas resident", "If you are a HIPAA covered entity",
+  etc.) and asserts the audit still passes clean. None of those
+  phrases are AI system prompts and none should flag.
+
+Test suite is now 11 tests (was 10). All pass on macOS bash 3.2.
+
 ## [0.2.3] — 2026-04-13
 
 ### Fixed

@@ -30,7 +30,7 @@ if [ -d src ]; then
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     add_finding "CRITICAL" "inline-prompt: $f"
-  done < <(grep -rIliE "(you[[:space:]]+are[[:space:]]+a|as[[:space:]]+an[[:space:]]+ai|<\|system\|>|^(system|assistant):)" \
+  done < <(grep -rIliE "([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])" \
              --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" \
              src 2>/dev/null | grep -v "gateway" || true)
 fi

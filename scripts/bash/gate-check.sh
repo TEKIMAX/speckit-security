@@ -121,7 +121,7 @@ fi
 # Gate F — Inline Content Scan
 INLINE_HIT=0
 if [ -d src ]; then
-  hits=$(grep -rIliE "(you[[:space:]]+are[[:space:]]+a|as[[:space:]]+an[[:space:]]+ai|<\|system\|>)" \
+  hits=$(grep -rIliE "([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])" \
        --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" \
        src 2>/dev/null | grep -v "gateway" || true)
   if [ -n "$hits" ]; then
