@@ -1,0 +1,50 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shell-tests:
+    name: shell tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify POSIX shell toolchain
+        run: |
+          bash --version
+          python3 --version
+          command -v grep
+          command -v sed
+
+      - name: Run test suite
+        run: bash tests/run.sh
+
+  lint-scripts:
+    name: shellcheck bash scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: |
+          set -e
+          # Lint every bash script in scripts/bash/ and tests/
+          find scripts/bash tests -name "*.sh" -type f -print0 \
+            | xargs -0 shellcheck --severity=warning --exclude=SC1091,SC2086,SC2155 || true
+          # Shellcheck is advisory for now — warnings print but don't block
+          # the matrix. Set `|| true` removal to make it enforcing later.
