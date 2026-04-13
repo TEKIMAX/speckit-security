@@ -1,0 +1,99 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - '.github/workflows/docs-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - '.github/workflows/docs-deploy.yml'
+  workflow_dispatch:
+
+# Allow only one concurrent deploy in flight for the docs site.
+# Cancel in-progress runs for the same branch when a new push lands.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and deploy
+    runs-on: ubuntu-latest
+    # Required so the cloudflare/pages-action can comment on PRs with
+    # the preview URL.
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+
+    defaults:
+      run:
+        working-directory: docs-site
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The Pages project must already exist in the dashboard.
+          # Create it once with:
+          #   wrangler pages project create speckit-security-docs \
+          #     --production-branch main
+          command: >-
+            pages deploy out
+            --project-name=speckit-security-docs
+            --branch=${{ github.head_ref || github.ref_name }}
+            --commit-dirty=true
+          workingDirectory: docs-site
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { deployment_url, pages_deployment_alias_url } = process.env;
+            const url = pages_deployment_alias_url || deployment_url;
+            if (!url) return;
+            const body = [
+              '📘 **Docs preview deployed**',
+              '',
+              `Preview URL: ${url}`,
+              '',
+              '_This preview updates on every push to this branch._',
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+        env:
+          deployment_url: ${{ steps.deploy.outputs.deployment-url }}
+          pages_deployment_alias_url: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
