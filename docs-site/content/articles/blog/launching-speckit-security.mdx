@@ -1,0 +1,232 @@
+---
+title: "Launching speckit-security: the security layer Spec Kit didn't ship with"
+description: "Why we built a security-first extension for GitHub Spec Kit, how we use it on real projects, and what we found when we ran it on our own codebase."
+date: "2026-04-13"
+author: Christian Kaman
+excerpt: "Spec Kit is excellent at turning specifications into code. It does not enforce security. Here's the extension we built to close that gap — why it exists, how we use it, and what we learned the week we ran it on our own documentation."
+---
+
+## The gap
+
+[GitHub Spec Kit](https://github.com/github/spec-kit) is a genuinely
+good tool. It packages templates, prompts, and slash commands into a
+structured workflow that moves an AI coding agent from "specify this
+feature" through "plan it", "break it into tasks", and "implement it"
+without the usual vibe-coding chaos. Eighty-five thousand stars. An
+active community. A well-designed extension API. It works.
+
+What it does **not** do is enforce any security discipline.
+
+There's no built-in threat model step. No data contract validation.
+No check that an AI feature has a pinned model version and a rollback
+plan. No scan for inline system prompts committed to source. No red
+team workflow. None of it.
+
+That's not a criticism of Spec Kit — it's deliberately the
+spec-driven development *framework*, not the security framework.
+But for teams shipping AI products to regulated buyers, the absence
+is a gap that compounds into incidents later. You move fast through
+`/speckit.specify` and `/speckit.implement`, ship a feature, and a
+month later an LLM leaks PII through a prompt a reviewer never saw,
+or a model version silently drifts from "gemini-2.5" to "latest" and
+breaks your evals in production.
+
+We saw that pattern enough times to stop hoping someone else would
+fix it, and we built `speckit-security`.
+
+## What it is
+
+`speckit-security` is a Spec Kit extension. Not a fork, not a
+replacement, not a parallel CLI — it installs via
+`specify extension add` and it plugs into Spec Kit's existing hook
+system. Every command it adds is an ordinary
+`/speckit.tekimax-security.*` slash command that your AI agent
+(Claude Code, Copilot, Cursor, Gemini, OpenCode, Windsurf, and 15+
+others) picks up automatically.
+
+It adds **six security gates** to the SDD lifecycle:
+
+1. **Data Contract** — before DESIGN, the spec must declare sources,
+   schemas (Zod), PII strategy, bias audit, drift thresholds, and
+   retention policy. A real Zod file has to exist, and it can't use
+   `z.any()`.
+2. **Threat Model** — STRIDE coverage for every entry point, with no
+   High/Critical threats marked `[UNMITIGATED]` at DESIGN time.
+3. **Model Governance** — for AI features, the model version must be
+   pinned (no `"latest"`, no `"stable"`), and the rollback plan must
+   be documented.
+4. **Guardrails** — a versioned guardrail YAML with input
+   `blocked_patterns` and output `redact_patterns` has to exist
+   before implement.
+5. **Red Team** — before ship, a red team report file must exist. An
+   automated runner can execute the scenarios against a staging
+   endpoint with safety guards (it refuses any URL containing `prod`
+   or `production`, and rate-limits itself).
+6. **Inline Content Scan** — blocks inline system prompts in `src/`,
+   committed secrets anywhere in the repo, and `.env` files tracked
+   by git.
+
+Each gate is a real POSIX bash script with no runtime dependencies.
+The scripts run on macOS and Linux, they complete in under a second,
+and they append append-only JSONL entries to a gate log per feature
+so you get an audit trail for free.
+
+Five **phase hooks** wire the gates into Spec Kit's lifecycle so
+they fire automatically:
+
+- `after_specify` → data contract
+- `after_plan` → threat model
+- `before_implement` → gate check (blocks on failure)
+- `after_implement` → post-implementation audit
+- `before_analyze` → red team
+
+Plus eight slash commands, an install-rules command that writes our
+engineering discipline into the spec-kit constitution and your
+agent's context file so the AI inherits the rules automatically,
+and a generic rules template any project can adopt.
+
+All of it is Apache-2.0. All of it is on GitHub. All of it works
+with the stock Spec Kit install — no fork required.
+
+## How we use it
+
+TEKIMAX ships AI features to clients who care about compliance. The
+hard part of that work isn't writing the AI code — most AI features
+are a few hundred lines of prompt engineering and glue. The hard
+part is the discipline around those few hundred lines: Are the
+schemas actually enforced at runtime? Is the model version pinned?
+Is there a rollback? Is there a threat model? Has anyone run a
+prompt-injection test against it?
+
+We use `speckit-security` as the enforcement layer on every client
+feature that touches AI. The workflow is the same every time:
+
+1. `/speckit.specify` — outline the feature
+2. The `after_specify` hook auto-fires and writes the data contract
+   section into the spec (schemas, PII, bias, drift, retention)
+3. `/speckit.plan` — Spec Kit generates the implementation plan
+4. The `after_plan` hook auto-fires and runs a STRIDE threat model
+   against the plan
+5. `/speckit.tekimax-security.guardrails` and `model-governance` to
+   wire the AI-specific sections
+6. `/speckit.tasks` — Spec Kit breaks down the work
+7. The `before_implement` hook runs the full gate check. **If any
+   gate fails, implementation is blocked.** This is the whole point:
+   the developer can't accidentally skip the discipline, because the
+   tool refuses to proceed.
+8. `/speckit.implement` — Spec Kit writes the code
+9. The `after_implement` hook runs the audit, which scans for inline
+   prompts, committed secrets, and direct model SDK imports outside
+   the feature's designated gateway file
+10. `/speckit.tekimax-security.red-team` generates adversarial
+    scenarios and (optionally) runs them against staging
+11. `/speckit.analyze` — Spec Kit's final pre-ship analysis
+
+The developer writes the spec, reviews the generated sections, fixes
+whatever the gates flag, and ships. The discipline is inherited by
+default, not imposed by memory.
+
+## How we found the bugs in our own tool
+
+The most useful thing that happened this week is that we ran
+`speckit-security` on the documentation site for `speckit-security`.
+
+The docs site is a Next.js + Fumadocs project. It has a
+`customization.md` page that explains, in words, how the audit
+script detects secret patterns. So the page contains literal
+strings like `sk_live_` and `PRIVATE_KEY` and `BEGIN RSA` — as
+*documentation of what to detect*.
+
+Next.js bundles every MDX page into compiled JavaScript in
+`.next/server/chunks/*.js`. When we ran the audit against the docs
+project, it walked the filesystem looking for secret patterns and
+hit every compiled chunk of the page that documents the secret
+patterns. Eight critical findings on our own documentation
+describing the audit.
+
+Two bugs at once:
+
+1. The exclusion list didn't include `.next/`, `out/`, `.source/`,
+   or `.wrangler/`. Build-output directories are always gitignored,
+   but the audit was walking the filesystem, not the git index.
+2. The pattern matchers were too loose. `sk_live_` alone was
+   enough — no trailing key material required. So any string that
+   mentioned the prefix, anywhere, would match.
+
+Neither bug was hypothetical. Both would have burned every single
+user the moment they ran the audit against a real framework-based
+project. And neither bug had shown up in our test suite, because
+the tests all used isolated fixtures — they never audited a real
+project with real build output and real documentation.
+
+We fixed both in the same release (`v0.2.3`) and added two
+regression tests that encode each failure mode as a scenario.
+The fix to the regex required a subtle trick: the test has to
+contain real-looking key material to prove the regex still catches
+real keys, but the literal can't appear in the source file or
+GitHub's push protection scanner blocks the commit. We solved it by
+assembling the string at runtime via `printf`, the same pattern
+already used by an earlier test for the same reason.
+
+**This is dogfooding doing its job.** We found a class of bug that
+no unit test would have caught, because the bug only shows up when
+the tool is run against a real project with real build artifacts
+and real documentation.
+
+## What's next
+
+The open source extension is at `v0.2.3` and the CI pipeline
+automatically builds, tests on both Ubuntu and macOS, and deploys
+this documentation site to Cloudflare Pages on every push. The test
+suite is at 10 tests and growing incrementally — every bug fix
+lands with a regression test.
+
+The near-term roadmap is straightforward:
+
+- More agent coverage — we've hands-on verified Claude Code,
+  OpenCode, Copilot, Gemini CLI, and Cursor. The other 15+ agents
+  Spec Kit supports should work (the translation happens in Spec
+  Kit, not in our code) but we haven't tested each one.
+- A plugin system for teams that want to register custom gates or
+  audit checks. The shape is in planning — not shipped yet because
+  we'd rather design it around real use cases than speculate.
+- Public catalog submission to the Spec Kit community extensions
+  registry (the PR is already open, waiting on maintainer review).
+
+One more note: we also maintain an **extended version** of
+`speckit-security` that we use internally for client deployments
+where the compliance and runtime hardening requirements go beyond
+what belongs in an open source project. That version adds things
+like signed audit attestation, runtime middleware generators for
+features we configure per-customer, and deeper compliance preflights
+for SOC 2 and similar regimes. It's not public and it's not part of
+what's documented here — but if you're a team shipping AI products
+that need that level of rigor and you'd rather not build it
+yourself, reach out to **support@tekimax.com**.
+
+## Try it
+
+The open-source extension is genuinely useful by itself. If you're
+using Spec Kit, or you're about to use Spec Kit, install
+`speckit-security` as the security layer:
+
+```bash
+# Install Spec Kit (one time per machine)
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+
+# Clone and install the extension
+git clone https://github.com/TEKIMAX/speckit-security
+cd /path/to/your-spec-kit-project
+specify extension add --dev /path/to/speckit-security
+```
+
+See the [Getting Started](/docs/getting-started) guide for the
+10-minute walkthrough and [How It Works](/docs/how-it-works) for
+the detailed per-gate breakdown.
+
+Feedback, bug reports, and pull requests welcome at the
+[GitHub repo](https://github.com/TEKIMAX/speckit-security). Security
+reports: **security@tekimax.com**. Everything else:
+**support@tekimax.com**.
+
+— Christian Kaman, TEKIMAX

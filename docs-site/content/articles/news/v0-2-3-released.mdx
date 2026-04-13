@@ -1,0 +1,65 @@
+---
+title: "v0.2.3 — audit precision fixes"
+description: "Tightens the secret detection regex and excludes build-artifact directories. Two regression tests added. Found by running the audit against our own docs."
+date: "2026-04-13"
+author: Christian Kaman
+excerpt: "Fixes two false-positive classes in audit.sh and gate-check.sh Gate F, found by dogfooding the audit against this documentation site itself. Pattern matchers now require real key material, and .next/, out/, .source/, and .wrangler/ are excluded from the filesystem walk."
+---
+
+## What's fixed
+
+Two classes of false positive in `audit.sh` and `gate-check.sh` Gate
+F, both found by running the audit against this documentation site.
+
+**1. Build-artifact walking.** The scripts walked the filesystem for
+secret patterns and hit compiled output under `.next/`, `out/`,
+`.source/`, and `.wrangler/`. Those directories are gitignored but
+the scripts weren't excluding them. All four are now in the
+exclusion regex alongside `node_modules/`, `.git/`, and `dist/`.
+
+**2. Pattern over-matching.** The regexes matched bare prefixes like
+`sk_live_` and the bare identifier `PRIVATE_KEY`. Any documentation
+that *mentions* these patterns — including our own customization
+page — tripped the audit. The patterns are now tight:
+
+- `sk_live_[0-9a-zA-Z]{24,}` (Stripe live keys are 24+ chars)
+- `sk_test_[0-9a-zA-Z]{24,}`
+- Full PEM header `-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----`
+- `xoxb-[0-9a-zA-Z-]{20,}` for Slack bot tokens
+- `ghp_`, `gho_`, `ghs_` + 36 chars for GitHub tokens
+
+AWS `AKIA[0-9A-Z]{16}` and Google `AIza[0-9A-Za-z_-]{35}` were
+already tight and unchanged.
+
+## Regression tests
+
+Two new tests encode both failure modes:
+
+- `tests/audit/skip-build-artifacts.sh` plants real-looking key
+  material inside `.next/` and `out/` and asserts the audit still
+  passes clean. Test payloads are assembled at runtime via `printf`
+  so the literal tokens never appear in committed source (avoids
+  tripping GitHub's push protection on the test file itself).
+- `tests/audit/skip-doc-mentions.sh` plants bare doc-style prefix
+  mentions in a `src/` file and asserts the audit passes clean.
+
+The test suite is now **10 tests, all passing** on macOS bash 3.2
+and Ubuntu latest.
+
+## Upgrade
+
+```bash
+cd /path/to/your-speckit-security-clone
+git pull
+# then reinstall into any affected projects
+cd /path/to/project
+specify extension remove tekimax-security
+specify extension add --dev /path/to/speckit-security
+```
+
+Or on the [releases page](https://github.com/TEKIMAX/speckit-security/releases/tag/v0.2.3).
+
+The full story of how we found the bugs is in the blog post
+["Launching speckit-security"](/articles/blog/launching-speckit-security) —
+the short version is: we audited our own documentation site and the
+audit flagged itself.
