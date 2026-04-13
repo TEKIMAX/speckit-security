@@ -1,6 +1,6 @@
 ---
 title: How It Works
-description: Six gates, five hooks, eight commands — and how they fit into Spec Kit's lifecycle.
+description: Six gates, five hooks, eight commands and how they fit into Spec Kit's lifecycle.
 ---
 
 ## The SDD lifecycle with speckit-security wired in
@@ -9,31 +9,36 @@ Spec Kit's native lifecycle has five phases: **specify**, **plan**,
 **tasks**, **implement**, **analyze**. `speckit-security` layers six
 gates on top of those phases via Spec Kit's hook system.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  /speckit.specify   →  [after_specify hook]                 │
-│                         → Gate A: Data Contract             │
-│                                                             │
-│  /speckit.plan      →  [after_plan hook]                    │
-│                         → Gate B: Threat Model (STRIDE)     │
-│                                                             │
-│  /speckit.tasks     →  [before_implement hook]              │
-│                         → Gate C: Model Governance          │
-│                         → Gate D: Guardrails                │
-│                         → Gate F: Inline Content Scan       │
-│                         (runs gate-check.sh, may BLOCK)     │
-│                                                             │
-│  /speckit.implement →  [after_implement hook]               │
-│                         → audit.sh                          │
-│                         → scans for inline prompts, secrets │
-│                                                             │
-│  /speckit.analyze   →  [before_analyze hook]                │
-│                         → Gate E: Red Team                  │
-│                         (optional, prompts user)            │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+<Mermaid chart={`flowchart TB
+  classDef phase fill:#171717,stroke:#7c3aed,stroke-width:2px,color:#f4f4f5,font-weight:bold
+  classDef hook  fill:#0a0a0a,stroke:#525252,color:#a3a3a3,font-size:12px
+  classDef gate  fill:#1a0b2e,stroke:#7c3aed,color:#f4f4f5,font-size:12px
+  classDef block fill:#2a0b0b,stroke:#ef4444,color:#fecaca,font-size:12px
+
+  S["/speckit.specify"]:::phase
+  P["/speckit.plan"]:::phase
+  T["/speckit.tasks"]:::phase
+  I["/speckit.implement"]:::phase
+  N["/speckit.analyze"]:::phase
+
+  HS["after_specify hook"]:::hook
+  HP["after_plan hook"]:::hook
+  HI["before_implement hook"]:::hook
+  HA["after_implement hook"]:::hook
+  HN["before_analyze hook"]:::hook
+
+  GA["Gate A — Data Contract"]:::gate
+  GB["Gate B — Threat Model (STRIDE)"]:::gate
+  GC["Gates C + D + F (gate-check.sh)"]:::block
+  AU["audit.sh — inline prompts, secrets"]:::gate
+  GE["Gate E — Red Team (optional)"]:::gate
+
+  S --> HS --> GA --> P
+  P --> HP --> GB --> T
+  T --> HI --> GC --> I
+  I --> HA --> AU --> N
+  N --> HN --> GE
+`} />
 
 ## The six gates
 

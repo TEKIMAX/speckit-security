@@ -13,6 +13,18 @@ directly into Spec Kit's `after_specify`, `after_plan`, `before_implement`,
 technical debt at the point where it's cheapest to fix — in the spec,
 before a single line of code is written.
 
+> **One layer, not the whole program.** `speckit-security` is a
+> **starting point**, not a complete security solution. It catches a
+> specific class of AI-delivery issues at design and commit time. It
+> is **extensible**: every check is configurable, every template is
+> overridable, and every pattern can be customized per project. Use
+> it alongside your other security tooling — SAST, dependency
+> scanning, runtime monitoring, compliance platforms — not as a
+> replacement for any of them. See
+> [Customization](/docs/customization) and the
+> [FAQ entry on scope](/docs/faq#is-this-a-complete-security-solution)
+> for the details.
+
 <Cards>
   <Card
     title="Getting Started"
@@ -58,6 +70,8 @@ that specs contain the required sections, that schema files exist,
 that model versions are pinned, that guardrail config is present,
 and that code doesn't contain inline prompts or committed secrets.
 
+<div className="wide-table">
+
 | Check | Where enforced | What it does |
 |---|---|---|
 | **Data Contract section + Zod schema file** | `gate-check.sh` Gate A | Blocks if the spec has no `## Data Contract` section, the schema file is missing, or the schema uses `z.any()`. |
@@ -69,6 +83,8 @@ and that code doesn't contain inline prompts or committed secrets.
 | **Direct model SDK imports outside the gateway** | `audit.sh` (post-implementation) | Greps `src/` for `@google/genai`, `@anthropic-ai/sdk`, and `openai` imports outside allowlisted files. |
 | **Guardrail version bump on edit** | `audit.sh` (post-implementation) | Warns if `prompts/system/<slug>.md` or `prompts/guardrails/<slug>.yml` was changed without a version bump in the frontmatter. |
 
+</div>
+
 **What the gates do not do:** they don't read the *content* of a PII
 strategy, bias audit, or rollback plan — they only verify the
 sections or tokens are present. Rich content validation is the
@@ -76,18 +92,32 @@ reviewer's job and the AI agent's job, not the script's.
 
 ## Six gates, eight commands, five hooks
 
-```
-SPECIFY ──▶ DESIGN ──▶ IMPLEMENT ──▶ VERIFY ──▶ OPERATE
-   │           │            │            │          │
-   ▼           ▼            ▼            ▼          ▼
- Gate A     Gate B       Gate C/D      Gate E     (ship)
-  Data      Threat        Model &     Red Team
- Contract    Model      Guardrails
-                            │
-                            ▼
-                         Gate F
-                       Inline Scan
-```
+<Mermaid chart={`flowchart LR
+  classDef phase fill:#171717,stroke:#7c3aed,stroke-width:2px,color:#f4f4f5,font-weight:bold
+  classDef gate  fill:#1a0b2e,stroke:#a78bfa,color:#f4f4f5,font-size:12px
+  classDef ship  fill:#0a2a1a,stroke:#10b981,color:#a7f3d0,font-size:12px
+
+  SPEC["SPECIFY"]:::phase
+  DESIGN["DESIGN"]:::phase
+  IMPL["IMPLEMENT"]:::phase
+  VER["VERIFY"]:::phase
+  OPR["OPERATE"]:::phase
+  SHIP(["ship"]):::ship
+
+  A["Gate A<br/>Data Contract"]:::gate
+  B["Gate B<br/>Threat Model"]:::gate
+  CD["Gate C + D<br/>Model and Guardrails"]:::gate
+  F["Gate F<br/>Inline Scan"]:::gate
+  E["Gate E<br/>Red Team"]:::gate
+
+  SPEC --> DESIGN --> IMPL --> VER --> OPR --> SHIP
+
+  SPEC --> A
+  DESIGN --> B
+  IMPL --> CD
+  IMPL --> F
+  VER --> E
+`} />
 
 Gates A–F are enforced by real bash scripts. Every run appends a
 signed JSONL entry to an append-only gate-log for compliance audit

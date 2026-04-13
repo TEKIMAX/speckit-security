@@ -5,9 +5,19 @@ export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <span className="font-bold tracking-tight">
-          <span className="text-fd-primary">speckit</span>
-          <span className="text-fd-muted-foreground">-security</span>
+        <span className="inline-flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/favicon.png"
+            alt=""
+            width={24}
+            height={24}
+            className="rounded-sm"
+          />
+          <span className="font-bold tracking-tight">
+            <span className="text-fd-primary">speckit</span>
+            <span className="text-fd-muted-foreground">-security</span>
+          </span>
         </span>
       ),
     },

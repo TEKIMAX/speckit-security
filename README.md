@@ -162,8 +162,14 @@ existing tools. See [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) for
 the full customization guide (config file, template overrides, hook
 toggling, allowlists, env vars, and more).
 
-Opinionated stack bindings and runtime middleware generators live in
-the commercial `tekimax-enterprise` extension — see below.
+> **This is one layer, not the whole program.** `speckit-security`
+> is a starting point. It enforces a specific class of checks at
+> spec and commit time. It is **not** a replacement for SAST,
+> dependency scanning, runtime monitoring, compliance platforms,
+> penetration testing, or any of the other security tooling your
+> team already uses. Extend it with your own checks via config
+> overrides, template overrides, forks, or sibling extensions —
+> see the customization guide.
 
 ---
 
@@ -181,9 +187,11 @@ Together, they compound quality instead of debt.
 ## Roadmap
 
 - [x] **v0.2.0** — Automated red team runner (hit staging, record results)
-- [ ] GitHub Actions workflow for CI gate checks
-- [ ] Signed gate-log (cosign / sigstore) — shipping in `tekimax-enterprise`
-- [ ] Compliance preset packs (SOC 2, HIPAA, GDPR) — SOC 2 shipping in `tekimax-enterprise`
+- [x] **v0.2.2** — Rules bind the AI agent at runtime via constitution + context files
+- [x] **v0.2.3** — Audit precision fixes (build artifact exclusion, tighter secret patterns)
+- [x] **v0.2.4** — Inline-prompt precision (stop flagging legal prose)
+- [ ] Formal plugin system for custom gates and audit checks
+- [ ] GitHub Actions workflow template for running gate-check in CI
 - [ ] Integration with DeepTeam for automated adversarial eval
 - [ ] Public community catalog submission
 
@@ -206,14 +214,6 @@ before you invest in a PR. All contributors agree to the
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-## Enterprise layer
-
-For opinionated runtime middleware generators (AI gateway clients,
-PII encryption middleware), cosign-signed gate-log attestation, SOC 2
-compliance preflight, and auditor-ready compliance reports, see
-`tekimax-enterprise` (private, commercial). Contact
-**support@tekimax.com** for licensing.
 
 ---
 

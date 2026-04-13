@@ -361,5 +361,3 @@ it around validated demand than speculation.
 - **Open an issue:** https://github.com/TEKIMAX/speckit-security/issues
 - **Security concerns:** security@tekimax.com
 - **General questions:** support@tekimax.com
-- **Enterprise features** (signed attestation, runtime middleware,
-  SOC 2 preflight, compliance reports): support@tekimax.com

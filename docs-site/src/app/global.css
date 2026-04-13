@@ -10,3 +10,39 @@ html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
 }
+
+/*
+ * Docs content — let wide tables breathe.
+ *
+ * Fumadocs prose has a narrow max-width by default; three-column
+ * tables with long cell text get squeezed. Wrap tables in a
+ * horizontally-scrollable block so they never overflow the layout
+ * and never shrink columns until every word stacks.
+ */
+.prose table,
+article table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  width: max-content;
+  min-width: 100%;
+}
+
+.prose table th,
+.prose table td,
+article table th,
+article table td {
+  white-space: normal;
+  word-break: normal;
+  min-width: 8rem;
+}
+
+/*
+ * Wide pages — bump the container for pages that opt into full-width
+ * mode via `full: true` in their frontmatter. Fumadocs handles the
+ * layout, this just gives the content area a bit more room before
+ * the TOC column takes over.
+ */
+#nd-docs-layout main > article {
+  max-width: min(var(--fd-layout-width, 80rem), 100%);
+}

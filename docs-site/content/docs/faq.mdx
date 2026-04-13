@@ -9,14 +9,33 @@ No. `speckit-security` is a Spec Kit **extension** — it installs on
 top of Spec Kit and adds security gates to Spec Kit's existing
 phases. You still need Spec Kit (`specify` CLI) to use it.
 
-## Does it replace Vanta / Drata / Secureframe?
+## Is this a complete security solution?
 
-No, and it's not trying to. Those platforms do continuous
-organization-wide evidence collection at runtime. `speckit-security`
-(and its future enterprise layer) does feature-level gap checks at
-design time. They're complementary — use both.
+**No — and it's not trying to be.** `speckit-security` catches a
+specific class of issues at a specific point in the lifecycle: it
+enforces that feature specs declare the required security sections,
+that model versions are pinned, that guardrail configs exist, and
+that implementation code doesn't contain inline prompts, committed
+secrets, or direct SDK imports outside an allowlisted gateway layer.
 
-See the [Enterprise page](/docs/enterprise) for the full comparison.
+That's a meaningful subset of what production AI security requires.
+It is **not** a replacement for:
+
+- Continuous organization-wide compliance monitoring
+- SAST / DAST code scanners
+- Dependency vulnerability scanning
+- Secret rotation and key management
+- Network security, WAF, DDoS protection
+- Infrastructure hardening
+- Employee security training
+- Incident response tooling
+- Penetration testing by humans
+- External security audits
+
+Use it as **one layer** of your broader security program, not as the
+whole program. The project is designed to be extended — see
+[Customization](/docs/customization) for the config, template
+override, and sibling-extension paths for adding your own checks.
 
 ## Does it work with my AI agent?
 
@@ -47,8 +66,7 @@ a second and `audit.sh` runs in under two seconds.
 
 ## What happens if a gate fails?
 
-In `strict` mode (the default after you flip the config), the hook
-blocks the phase transition. You either:
+In `strict` mode, the hook blocks the phase transition. You either:
 
 1. Fix the issue the gate is catching, or
 2. Document it as deferred debt in the spec's `§8 Deferred / Debt`
@@ -59,19 +77,6 @@ blocks the phase transition. You either:
 In `warn` mode, the hook still reports the failure but does not
 block.
 
-## Is the enforcement actually useful without enterprise features?
-
-Yes. The core open-source extension catches the most common failure
-modes that ship AI products to production with latent
-vulnerabilities: inline system prompts, committed API keys, unpinned
-model versions, missing rollback plans, undeclared data contracts,
-and unmitigated STRIDE threats. Those are the bugs that turn into
-incidents.
-
-The enterprise layer adds runtime middleware generators and signed
-attestation on top, which are specifically for compliance-heavy
-teams.
-
 ## Can I use this without spec-driven development?
 
 Yes, but the value is lower. The gates are designed to run at
@@ -80,17 +85,28 @@ write specs, you only get the post-implementation `audit.sh` checks
 (inline prompts, secrets, direct SDK imports). That's still
 valuable but it's about 20% of what the extension offers.
 
-## What's the plugin system for custom gates?
+## Can I add my own gates or checks?
 
-There isn't one yet. v0.2.x ships with template overrides, config
-overrides, and fork-or-sibling-extension as the customization paths.
-A formal plugin system is planned for a later release — see the
-["Future plugin system" section of CUSTOMIZATION.md](https://github.com/TEKIMAX/speckit-security/blob/main/docs/CUSTOMIZATION.md#future-plugin-system)
-for the current thinking.
+The intended paths today are:
 
-If you have a concrete use case for a custom gate, **please open an
-issue** describing what you need. Real use cases shape the plugin
-API.
+1. **Config-level overrides** — edit
+   `tekimax-security-config.yml` to add your own regex patterns,
+   required spec sections, file-scope globs, and allowlists.
+2. **Template overrides** — drop replacement templates into
+   `.specify/templates/overrides/` so your team's spec and guardrail
+   templates are used instead of the bundled ones.
+3. **Fork the extension** — modify or add bash scripts directly,
+   then install with `specify extension add --dev` from your fork.
+4. **Sibling extension** — write a second Spec Kit extension that
+   coexists with `speckit-security` and hooks into the same
+   lifecycle phases. Both extensions run their own gates.
+
+A formal plugin system (register a custom gate via config, no fork
+needed) is planned for a later release. If you have a concrete use
+case, **please open an issue** describing what you need — the API
+will be shaped by real demand.
+
+See [Customization](/docs/customization) for the full details.
 
 ## How do I contribute?
 
