@@ -39,9 +39,9 @@ fi
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   add_finding "CRITICAL" "committed-secret: $f"
-done < <(grep -rIlE "(sk_live_|sk_test_|PRIVATE_KEY|BEGIN RSA|BEGIN OPENSSH|xoxb-|ghp_[0-9a-zA-Z]{36}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35})" \
+done < <(grep -rIlE "(sk_live_[0-9a-zA-Z]{24,}|sk_test_[0-9a-zA-Z]{24,}|-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|xoxb-[0-9a-zA-Z-]{20,}|ghp_[0-9a-zA-Z]{36}|gho_[0-9a-zA-Z]{36}|ghs_[0-9a-zA-Z]{36}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35})" \
            --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" --include="*.env*" \
-           . 2>/dev/null | grep -vE "(node_modules|\.git/|dist/)" || true)
+           . 2>/dev/null | grep -vE "(node_modules|\.git/|dist/|\.next/|out/|\.source/|\.wrangler/)" || true)
 
 # 3. .env committed
 if git ls-files 2>/dev/null | grep -qE '^\.env(\..*)?$'; then

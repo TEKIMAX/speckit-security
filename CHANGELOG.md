@@ -3,6 +3,47 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.2.3] — 2026-04-13
+
+### Fixed
+
+- **`audit.sh` and `gate-check.sh` secret detection** — two classes
+  of false positives eliminated, found by running the audit against
+  the project's own `docs-site/`:
+
+  1. **Build-artifact walking.** The scripts walked the filesystem
+     for secret patterns and hit compiled output under `.next/`,
+     `out/`, `.source/`, and `.wrangler/`. Those directories are
+     gitignored but the scripts weren't excluding them. Added all
+     four to the exclusion regex alongside `node_modules/`, `.git/`,
+     and `dist/`.
+
+  2. **Pattern over-matching.** The previous regexes matched bare
+     prefixes like `sk_live_`, `sk_test_`, and the bare identifier
+     `PRIVATE_KEY`. Documentation and example code that *mentions*
+     these patterns tripped the audit. Tightened to require real
+     key material:
+     - `sk_live_[0-9a-zA-Z]{24,}` (Stripe live keys are 24+ chars)
+     - `sk_test_[0-9a-zA-Z]{24,}`
+     - Full PEM header `-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----`
+       instead of bare `PRIVATE_KEY` or `BEGIN RSA`
+     - `ghp_[0-9a-zA-Z]{36}`, `gho_...`, `ghs_...` for GitHub tokens
+     - `xoxb-[0-9a-zA-Z-]{20,}` for Slack bot tokens
+     - `AKIA[0-9A-Z]{16}` and `AIza[0-9A-Za-z_-]{35}` unchanged
+
+### Added
+
+- **Two regression tests** for the fixes above:
+  - `tests/audit/skip-build-artifacts.sh` — plants real-looking
+    key material inside `.next/` and `out/` via `printf` runtime
+    assembly (so the literals never appear in committed source)
+    and asserts the audit still passes clean
+  - `tests/audit/skip-doc-mentions.sh` — plants bare doc-style
+    mentions of prefixes in a `src/` file and asserts the audit
+    still passes clean
+
+Test suite is now 10 tests (was 8). All pass on macOS bash 3.2.
+
 ## [0.2.2] — 2026-04-13
 
 ### Changed

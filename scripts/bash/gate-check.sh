@@ -129,9 +129,9 @@ if [ -d src ]; then
   fi
 fi
 SECRET_HIT=0
-if grep -rIl -E "(sk_live_|PRIVATE_KEY|BEGIN RSA|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35})" \
+if grep -rIl -E "(sk_live_[0-9a-zA-Z]{24,}|sk_test_[0-9a-zA-Z]{24,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|ghp_[0-9a-zA-Z]{36}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35})" \
      --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" \
-     . 2>/dev/null | grep -v "node_modules" | grep -q .; then
+     . 2>/dev/null | grep -vE "(node_modules|\.git/|\.next/|out/|\.source/|\.wrangler/|dist/)" | grep -q .; then
   SECRET_HIT=1
 fi
 ENV_COMMITTED=0
