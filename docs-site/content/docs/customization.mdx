@@ -1,0 +1,219 @@
+---
+title: Customization
+description: Config file, template overrides, hook toggling, allowlists, and environment variables.
+---
+
+`speckit-security` is designed to be stack-agnostic. You can adapt it
+to your team's conventions, tools, and policies without forking the
+repo. This page walks through every supported customization point in
+v0.2.2.
+
+<Callout type="info">
+  **No plugin system yet.** v0.2.2 does not expose a formal plugin
+  system for registering custom commands, gates, or audit checks.
+  That's a planned feature. For now, the customization paths below
+  cover every real adjustment you can make today.
+</Callout>
+
+## 1. Configuration file
+
+The primary customization surface is per-project:
+
+```
+.specify/extensions/tekimax-security/tekimax-security-config.yml
+```
+
+Copy the template after installing the extension:
+
+```bash
+cp .specify/extensions/tekimax-security/config/tekimax-security-config.template.yml \
+   .specify/extensions/tekimax-security/tekimax-security-config.yml
+```
+
+### Enforcement mode
+
+```yaml
+enforcement: warn        # warn = hooks advise but never block
+                         # strict = hooks block on any gate failure
+```
+
+<Callout type="warn">
+  The `enforcement` field is read by spec-kit's hook runtime, not by
+  the individual scripts. Even in `warn` mode, `gate-check.sh` and
+  `audit.sh` still exit non-zero on failure when run directly — the
+  `enforcement` flag controls whether the hook itself blocks the
+  calling phase transition.
+</Callout>
+
+### Stack declarations
+
+These are informational — the extension is stack-agnostic, so these
+values don't enforce specific vendors. They document what your team
+uses so threat models and gate checks can reference the right tools.
+
+```yaml
+stack:
+  ai_gateway: <your-ai-gateway>
+  guardrails: <your-guardrail-provider>
+  pii_encryption: field-level-encryption
+  rbac: <your-rbac-provider>
+  runtime: <your-runtime>
+  schema: zod
+  storage: <your-storage>
+```
+
+### Required spec sections
+
+Tell the gate check which sections a feature spec must contain before
+it can proceed past SPECIFY:
+
+```yaml
+required_sections:
+  - "Data Contract"
+  - "AI Integration"
+  - "Security"
+  - "Verification"
+```
+
+Add your own (e.g. `"Data Residency"` for EU-scoped projects) without
+modifying any extension code.
+
+## 2. Environment variables
+
+The bash scripts read these environment variables:
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `SPECKIT_PHASE` | `gate-check.sh` | Phase label in the gate-log JSONL entry (default: `before_implement`) |
+| `SPECKIT_TEKIMAX_SECURITY_STAGING_URL` | `red-team-run.sh` | Staging endpoint for the red-team runner |
+| `SPECKIT_TEKIMAX_SECURITY_MAX_RPS` | `red-team-run.sh` | Rate limit for the runner (default: 10) |
+
+## 3. Template overrides
+
+`speckit-security` ships seven reference templates under `templates/`.
+You can override any of them without touching the extension by using
+Spec Kit's standard template resolution stack:
+
+1. **Project-local overrides** — `.specify/templates/overrides/`
+2. **Installed template packs** — `.specify/templates/packs/<pack-id>/`
+3. **Extension-provided templates** — `.specify/extensions/tekimax-security/templates/`
+4. **Core templates**
+
+To override the STRIDE threat model template:
+
+```bash
+mkdir -p .specify/templates/overrides
+cp .specify/extensions/tekimax-security/templates/threat-model-stride.md \
+   .specify/templates/overrides/threat-model-stride.md
+# edit the copy to match your conventions
+```
+
+The AI agent will pick up your version on the next
+`/speckit.tekimax-security.threat-model` run.
+
+## 4. Allowlisting direct SDK imports
+
+The post-implementation audit flags direct model SDK imports outside
+your AI gateway layer. If your gateway client needs to import a raw
+SDK (which it does), add its path to the allowlist so the audit
+doesn't flag it:
+
+```yaml
+audit:
+  allowlist:
+    stack_direct_sdk:
+      - "src/ai/gateway.ts"
+      - "src/ai/gateway-test.ts"
+```
+
+## 5. Adjusting secret and inline-prompt patterns
+
+Both `gate-check.sh` and `audit.sh` detect committed secrets and
+inline prompts using configurable regex patterns. Override the
+defaults:
+
+```yaml
+audit:
+  inline_prompt_patterns:
+    - "you[[:space:]]+are[[:space:]]+a"
+    - "as[[:space:]]+an[[:space:]]+ai"
+    - "<\\|system\\|>"
+    # Add your own — e.g. a company-specific marker
+    - "// PROMPT-START"
+
+  secret_patterns:
+    - "sk_live_"
+    - "PRIVATE_KEY"
+    - "BEGIN RSA"
+    # Add tokens specific to your stack
+    - "my_company_internal_"
+
+  file_scope:
+    - "src/**/*.ts"
+    - "src/**/*.tsx"
+    - "src/**/*.py"
+    # Add directories specific to your layout
+    - "workers/**/*.ts"
+    - "lib/ai/**/*.ts"
+```
+
+## 6. Red team runner configuration
+
+```yaml
+red_team:
+  staging_url: "${SPECKIT_TEKIMAX_SECURITY_STAGING_URL}"
+  max_rps: 10
+  never_run_against:
+    - "prod"
+    - "production"
+```
+
+<Callout type="warn">
+  **Safety guardrail:** `red-team-run.sh` refuses any URL matching
+  `(^|[^a-z])prod([^a-z]|$)|production`. Your staging URL must not
+  contain those tokens. This is enforced in the script itself and
+  cannot be bypassed via config.
+</Callout>
+
+## 7. Enabling / disabling hooks
+
+### Disable one hook by making it interactive
+
+Edit `.specify/extensions/tekimax-security/extension.yml` and change
+`optional: false` to `optional: true` for the hook you want to
+suppress:
+
+```yaml
+hooks:
+  before_implement:
+    command: "speckit.tekimax-security.gate-check"
+    optional: true   # was false — now prompts instead of auto-running
+```
+
+This edits the installed copy in `.specify/`, not the upstream repo.
+Reinstalling the extension resets the change.
+
+### Disable the entire extension temporarily
+
+```bash
+specify extension disable tekimax-security
+# ... work without gates ...
+specify extension enable tekimax-security
+```
+
+### Remove the extension entirely
+
+```bash
+specify extension remove tekimax-security
+```
+
+## 8. Fork or write a sibling extension
+
+If configuration isn't enough:
+
+- **Fork:** `gh repo fork TEKIMAX/speckit-security --clone` and
+  modify. Please also open an issue upstream so broadly useful
+  changes can be merged back.
+- **Sibling extension:** write your own Spec Kit extension that
+  coexists with `speckit-security`. See the
+  [Spec Kit Extension Development Guide](https://github.com/github/spec-kit/blob/main/extensions/EXTENSION-DEVELOPMENT-GUIDE.md).

@@ -1,0 +1,122 @@
+---
+title: Overview
+description: A security-first extension for GitHub Spec Kit that catches AI technical debt before code ships.
+---
+
+## What is speckit-security?
+
+`speckit-security` is an extension for
+[GitHub Spec Kit](https://github.com/github/spec-kit) that adds
+**security gates** to the spec-driven development lifecycle. It hooks
+directly into Spec Kit's `after_specify`, `after_plan`, `before_implement`,
+`after_implement`, and `before_analyze` phase transitions to catch AI
+technical debt at the point where it's cheapest to fix — in the spec,
+before a single line of code is written.
+
+<Cards>
+  <Card
+    title="Getting Started"
+    href="/docs/getting-started"
+    description="Install Spec Kit, install the extension, and scaffold your first feature in 10 minutes."
+  />
+  <Card
+    title="How It Works"
+    href="/docs/how-it-works"
+    description="Six gates, eight commands, five hooks. See how it all fits together."
+  />
+  <Card
+    title="Commands Reference"
+    href="/docs/commands"
+    description="Every slash command the extension adds, what it does, and when to use it."
+  />
+  <Card
+    title="Customization"
+    href="/docs/customization"
+    description="Config file, template overrides, hook toggling, allowlists, env vars."
+  />
+</Cards>
+
+## Why it exists
+
+Spec Kit turns specifications into code. It does **not** enforce
+security — no threat modeling, no AI guardrails, no red teaming, no
+model governance, no audit of inline prompts or committed secrets.
+
+In production AI systems, those are the gaps where compounding
+technical debt lives. You ship a feature fast, a month later an
+LLM leaks PII through a prompt the reviewer never saw, and suddenly
+you're rewriting the whole data pipeline under incident pressure.
+
+`speckit-security` closes that loop. It's the security layer that
+Spec Kit doesn't ship with, packaged as a first-class extension so
+you don't have to fork spec-kit or maintain a parallel CLI.
+
+## What it catches
+
+The gates enforce the *existence* of security controls. They check
+that specs contain the required sections, that schema files exist,
+that model versions are pinned, that guardrail config is present,
+and that code doesn't contain inline prompts or committed secrets.
+
+| Check | Where enforced | What it does |
+|---|---|---|
+| **Data Contract section + Zod schema file** | `gate-check.sh` Gate A | Blocks if the spec has no `## Data Contract` section, the schema file is missing, or the schema uses `z.any()`. |
+| **STRIDE threat model** | `gate-check.sh` Gate B | Blocks if the spec has no `## Security / Threat Model` section, or if any threat is marked `[UNMITIGATED]` at High or Critical severity. |
+| **Model version pinning + rollback plan** | `gate-check.sh` Gate C | For AI features: blocks on `"latest"` or `"stable"` strings and requires a "Rollback" mention in the spec. |
+| **Guardrail YAML + system prompt file** | `gate-check.sh` Gate D | For AI features: requires `prompts/guardrails/<slug>.yml` with both `blocked_patterns` and `redact_patterns`, plus `prompts/system/<slug>.md`. |
+| **Red team report presence** | `gate-check.sh` Gate E | Checks that `red-team/RT-*-<slug>.md` exists. The separate `red-team-run.sh` executes the scenarios against staging when invoked with `--run`. |
+| **Inline prompts + secrets + .env in git** | `gate-check.sh` Gate F | Greps `src/` for inline system prompt patterns, the whole repo for committed secret patterns (`sk_live_`, `PRIVATE_KEY`, etc.), and `git ls-files` for `.env`. |
+| **Direct model SDK imports outside the gateway** | `audit.sh` (post-implementation) | Greps `src/` for `@google/genai`, `@anthropic-ai/sdk`, and `openai` imports outside allowlisted files. |
+| **Guardrail version bump on edit** | `audit.sh` (post-implementation) | Warns if `prompts/system/<slug>.md` or `prompts/guardrails/<slug>.yml` was changed without a version bump in the frontmatter. |
+
+**What the gates do not do:** they don't read the *content* of a PII
+strategy, bias audit, or rollback plan — they only verify the
+sections or tokens are present. Rich content validation is the
+reviewer's job and the AI agent's job, not the script's.
+
+## Six gates, eight commands, five hooks
+
+```
+SPECIFY ──▶ DESIGN ──▶ IMPLEMENT ──▶ VERIFY ──▶ OPERATE
+   │           │            │            │          │
+   ▼           ▼            ▼            ▼          ▼
+ Gate A     Gate B       Gate C/D      Gate E     (ship)
+  Data      Threat        Model &     Red Team
+ Contract    Model      Guardrails
+                            │
+                            ▼
+                         Gate F
+                       Inline Scan
+```
+
+Gates A–F are enforced by real bash scripts. Every run appends a
+signed JSONL entry to an append-only gate-log for compliance audit
+trails. The scripts are cross-platform POSIX bash with zero runtime
+dependencies beyond `bash` and `python3`.
+
+## Design principles
+
+- **Stack-agnostic.** The extension enforces the *existence* of
+  security controls (AI gateway, guardrails, PII encryption, RBAC,
+  schema validation) without requiring specific vendors. Configure
+  your stack in `tekimax-security-config.yml`.
+- **Agent-neutral.** Ships as a Spec Kit extension, so it works with
+  every agent Spec Kit supports — Claude Code, Copilot, Gemini CLI,
+  Cursor, OpenCode, Windsurf, and 15+ others. Spec Kit handles the
+  per-agent format translation.
+- **Zero runtime dependencies.** No npm install, no pip install. Just
+  `bash` and `python3`. Runs in under a second.
+- **Honest alpha.** v0.2.x is alpha and marked alpha. API may change.
+  See the [Changelog](https://github.com/TEKIMAX/speckit-security/blob/main/CHANGELOG.md)
+  for every release.
+
+## Open source, Apache-2.0
+
+`speckit-security` is maintained by [TEKIMAX](https://tekimax.com)
+and released under Apache-2.0. Contributions welcome — see
+[CONTRIBUTING.md](https://github.com/TEKIMAX/speckit-security/blob/main/CONTRIBUTING.md).
+
+Vulnerabilities: **security@tekimax.com** (see
+[SECURITY.md](https://github.com/TEKIMAX/speckit-security/blob/main/SECURITY.md)).
+
+General questions: **support@tekimax.com**.

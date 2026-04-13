@@ -1,0 +1,14 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "getting-started",
+    "how-it-works",
+    "commands",
+    "customization",
+    "agent-compatibility",
+    "development-rules",
+    "enterprise",
+    "faq"
+  ]
+}

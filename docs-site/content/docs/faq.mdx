@@ -1,0 +1,107 @@
+---
+title: FAQ
+description: Common questions about speckit-security — what it does, what it doesn't, and who it's for.
+---
+
+## Does it replace GitHub Spec Kit?
+
+No. `speckit-security` is a Spec Kit **extension** — it installs on
+top of Spec Kit and adds security gates to Spec Kit's existing
+phases. You still need Spec Kit (`specify` CLI) to use it.
+
+## Does it replace Vanta / Drata / Secureframe?
+
+No, and it's not trying to. Those platforms do continuous
+organization-wide evidence collection at runtime. `speckit-security`
+(and its future enterprise layer) does feature-level gap checks at
+design time. They're complementary — use both.
+
+See the [Enterprise page](/docs/enterprise) for the full comparison.
+
+## Does it work with my AI agent?
+
+Probably yes. Spec Kit supports ~20 AI agents and the extension is
+agent-neutral, so any agent Spec Kit supports should also support
+`speckit-security`. Five agents are hands-on verified (Claude Code,
+OpenCode, Copilot, Gemini CLI, Cursor); the others are inferred.
+
+See [Agent Compatibility](/docs/agent-compatibility) for the full
+matrix and how to test your own agent.
+
+## Does it work on Windows?
+
+Indirectly. The bash scripts (`gate-check.sh`, `audit.sh`,
+`red-team-run.sh`, `install-rules.sh`) require POSIX bash, so
+Windows users need WSL or Git Bash. The Spec Kit CLI itself runs
+fine on Windows, but the check scripts won't.
+
+## Will it slow me down?
+
+The gates add friction at phase transitions — that's the point.
+Without them you ship faster in the short term and pay interest in
+debt, incidents, and rewrites later. With them you ship slightly
+slower in the short term and avoid the compounding cost.
+
+Practically, on a well-prepared spec, `gate-check.sh` runs in under
+a second and `audit.sh` runs in under two seconds.
+
+## What happens if a gate fails?
+
+In `strict` mode (the default after you flip the config), the hook
+blocks the phase transition. You either:
+
+1. Fix the issue the gate is catching, or
+2. Document it as deferred debt in the spec's `§8 Deferred / Debt`
+   section with a remediation plan, or
+3. Temporarily disable the extension (`specify extension disable
+   tekimax-security`) if you have a legitimate reason to bypass
+
+In `warn` mode, the hook still reports the failure but does not
+block.
+
+## Is the enforcement actually useful without enterprise features?
+
+Yes. The core open-source extension catches the most common failure
+modes that ship AI products to production with latent
+vulnerabilities: inline system prompts, committed API keys, unpinned
+model versions, missing rollback plans, undeclared data contracts,
+and unmitigated STRIDE threats. Those are the bugs that turn into
+incidents.
+
+The enterprise layer adds runtime middleware generators and signed
+attestation on top, which are specifically for compliance-heavy
+teams.
+
+## Can I use this without spec-driven development?
+
+Yes, but the value is lower. The gates are designed to run at
+SPECIFY, DESIGN, IMPLEMENT, and VERIFY transitions. If you don't
+write specs, you only get the post-implementation `audit.sh` checks
+(inline prompts, secrets, direct SDK imports). That's still
+valuable but it's about 20% of what the extension offers.
+
+## What's the plugin system for custom gates?
+
+There isn't one yet. v0.2.x ships with template overrides, config
+overrides, and fork-or-sibling-extension as the customization paths.
+A formal plugin system is planned for a later release — see the
+["Future plugin system" section of CUSTOMIZATION.md](https://github.com/TEKIMAX/speckit-security/blob/main/docs/CUSTOMIZATION.md#future-plugin-system)
+for the current thinking.
+
+If you have a concrete use case for a custom gate, **please open an
+issue** describing what you need. Real use cases shape the plugin
+API.
+
+## How do I contribute?
+
+See [CONTRIBUTING.md](https://github.com/TEKIMAX/speckit-security/blob/main/CONTRIBUTING.md)
+for the issue-first workflow, dev setup, and the development rules
+PRs must follow. Non-negotiable rules are listed in
+[DEVELOPMENT-RULES.md](https://github.com/TEKIMAX/speckit-security/blob/main/docs/DEVELOPMENT-RULES.md).
+
+## Where do I report a vulnerability?
+
+**security@tekimax.com** — see
+[SECURITY.md](https://github.com/TEKIMAX/speckit-security/blob/main/SECURITY.md)
+for the responsible disclosure policy, scope, and response SLAs. Do
+**not** open a public issue for security reports.

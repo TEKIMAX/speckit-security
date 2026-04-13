@@ -1,0 +1,183 @@
+---
+title: How It Works
+description: Six gates, five hooks, eight commands — and how they fit into Spec Kit's lifecycle.
+---
+
+## The SDD lifecycle with speckit-security wired in
+
+Spec Kit's native lifecycle has five phases: **specify**, **plan**,
+**tasks**, **implement**, **analyze**. `speckit-security` layers six
+gates on top of those phases via Spec Kit's hook system.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  /speckit.specify   →  [after_specify hook]                 │
+│                         → Gate A: Data Contract             │
+│                                                             │
+│  /speckit.plan      →  [after_plan hook]                    │
+│                         → Gate B: Threat Model (STRIDE)     │
+│                                                             │
+│  /speckit.tasks     →  [before_implement hook]              │
+│                         → Gate C: Model Governance          │
+│                         → Gate D: Guardrails                │
+│                         → Gate F: Inline Content Scan       │
+│                         (runs gate-check.sh, may BLOCK)     │
+│                                                             │
+│  /speckit.implement →  [after_implement hook]               │
+│                         → audit.sh                          │
+│                         → scans for inline prompts, secrets │
+│                                                             │
+│  /speckit.analyze   →  [before_analyze hook]                │
+│                         → Gate E: Red Team                  │
+│                         (optional, prompts user)            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## The six gates
+
+Each gate is an actual check run by a real bash script, not a
+checkbox on a form. Gates emit pass / fail / skip verdicts and
+append a JSONL entry to an append-only gate log.
+
+<Cards>
+  <Card title="Gate A — Data Contract" description="Data Contract section + Zod schema file, no z.any()" />
+  <Card title="Gate B — Threat Model" description="Threat model section, no High/Critical unmitigated threats" />
+  <Card title="Gate C — Model Governance" description="No unpinned model versions, rollback plan documented" />
+  <Card title="Gate D — Guardrails" description="Guardrail YAML with blocked_patterns + redact_patterns" />
+  <Card title="Gate E — Red Team" description="Red team report file present (runner is separate)" />
+  <Card title="Gate F — Inline Content Scan" description="No inline system prompts, no committed secrets, no .env in git" />
+</Cards>
+
+### Gate A — Data Contract
+
+Runs three checks against the active spec and its schemas:
+
+1. The spec contains a `## 2. Data Contract` or `## Data Contract` section
+2. A Zod schema file exists at `src/schemas/<slug>.ts`
+3. The schema file does not contain `z.any()` (which bypasses type safety)
+
+Blocks if any check fails. **Note:** the gate verifies the section
+and schema file exist — it does not parse the content of the section
+or enforce what's inside it. The reviewer is responsible for
+validating that PII, bias, drift, and retention policies are actually
+declared.
+
+### Gate B — Threat Model
+
+Runs two checks:
+
+1. The spec contains a `## Security / Threat Model` section (or a
+   `## Security` section that mentions `STRIDE` or `Spoofing`)
+2. No `[UNMITIGATED]` markers exist adjacent to `High` or `Critical`
+   severity strings in the spec
+
+Blocks if the section is missing or if the regex
+`[UNMITIGATED].*(High|Critical)` matches.
+
+### Gate C — Model Governance
+
+Only applies to features with an AI integration (detected by the
+presence of `AI Integration` or `model:` in the spec). Runs two
+checks:
+
+1. The spec does not contain `latest` (anywhere) or `"stable"` (with
+   quotes) — both indicate an unpinned model version
+2. The spec contains the word `Rollback` (case-insensitive)
+
+Blocks on unpinned versions or missing rollback mention. **Note:**
+the gate verifies the rollback *mention* — it does not parse the
+rollback plan to check triggers, target versions, or time budgets.
+
+### Gate D — Guardrails
+
+Only runs when Gate C did not skip. Four checks:
+
+1. `prompts/guardrails/<slug>.yml` exists
+2. `prompts/system/<slug>.md` exists
+3. The YAML contains `blocked_patterns:`
+4. The YAML contains `redact_patterns:`
+
+Blocks if any file is missing or if either pattern section is absent
+from the guardrail YAML.
+
+### Gate E — Red Team
+
+Checks that a file matching `red-team/RT-*-<slug>.md` exists. Skips
+with a warning if no file is found (red team is a VERIFY-phase
+activity and not required at `before_implement` time).
+
+The separate `red-team-run.sh` helper reads that report file, parses
+scenarios from it, and POSTs them to a staging endpoint with safety
+guards: refuses URLs matching `prod`/`production`, rate-limits to
+`max_rps` (default 10), and injects an `X-Red-Team` header. That
+script is triggered by the `red-team` command with the `--run` flag.
+
+### Gate F — Inline Content Scan
+
+Three checks, in order:
+
+1. **Inline prompts** — greps `src/**/*.{ts,tsx,js,jsx,py}` for
+   patterns like `you are a`, `as an ai`, `<|system|>`
+   (case-insensitive). Files with `gateway` in their path are
+   excluded so the gateway client itself can reference model SDKs.
+2. **Committed secrets** — greps the whole repo (excluding
+   `node_modules/`) for patterns including `sk_live_`, `PRIVATE_KEY`,
+   `BEGIN RSA`, `AKIA[A-Z0-9]{16}`, and `AIza[A-Za-z0-9_-]{35}`.
+3. **`.env` in git** — runs `git ls-files` and checks for any path
+   matching `^\.env(\..*)?$`.
+
+Blocks if any of the three checks finds a hit.
+
+**Note:** direct model SDK imports outside the gateway are checked
+by `audit.sh`, not Gate F. Gate F is about inline prompts, secrets,
+and committed `.env` only. See the [audit command](/docs/commands/audit)
+for the direct-SDK-import check.
+
+## The five hooks
+
+Hooks are how the gates fire automatically without the developer
+remembering to run them. Each hook is registered in `extension.yml`
+under the `hooks:` block.
+
+| Hook | Command it runs | Blocking? |
+|---|---|---|
+| `after_specify` | `data-contract` | Optional — prompts the user |
+| `after_plan` | `threat-model` | Optional — prompts the user |
+| `before_implement` | `gate-check` | **Required — blocks on failure** |
+| `after_implement` | `audit` | **Required — blocks on critical findings** |
+| `before_analyze` | `red-team` | Optional — prompts the user |
+
+## The eight commands
+
+| Command | Purpose | Hook? |
+|---|---|---|
+| `/speckit.tekimax-security.data-contract` | Declare data contract (schemas, PII, bias, drift, retention) | `after_specify` |
+| `/speckit.tekimax-security.threat-model` | Generate STRIDE threat model | `after_plan` |
+| `/speckit.tekimax-security.model-governance` | Pin model version, define eval criteria, rollback plan | manual |
+| `/speckit.tekimax-security.guardrails` | Generate input/output guardrail config | manual |
+| `/speckit.tekimax-security.gate-check` | Run all gates and emit verdict | `before_implement` |
+| `/speckit.tekimax-security.audit` | Post-implementation scan | `after_implement` |
+| `/speckit.tekimax-security.red-team` | Generate adversarial scenarios and run them | `before_analyze` |
+| `/speckit.tekimax-security.install-rules` | Install dev rules into docs, constitution, and agent context | manual |
+
+## Append-only gate log
+
+Every gate-check run appends a JSONL entry to
+`.tekimax-security/gate-log.jsonl`:
+
+```json
+{"spec":"F-001","phase":"before_implement","verdict":"PASS","ts":"2026-04-13T08:30:00Z","user":"Christian Kaman","gates":{"A":"pass","B":"pass","C":"pass","D":"pass","E":"skip","F":"pass"}}
+```
+
+Same for `audit.sh` → `.tekimax-security/audit-log.jsonl`. The log
+is append-only by convention — never rewrite or delete entries. This
+is the audit trail your compliance reviewer reads.
+
+## Zero runtime dependencies
+
+Every script in `scripts/bash/` runs on POSIX bash with only `grep`,
+`sed`, `python3`, and `git`. No npm install, no pip install, no
+language runtime beyond what ships with macOS and Linux. The full
+test suite runs in under a second.

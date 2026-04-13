@@ -1,0 +1,142 @@
+---
+title: Getting Started
+description: Install Spec Kit, install the extension, and run your first gated feature in 10 minutes.
+---
+
+## Prerequisites
+
+- **macOS or Linux** (Windows via WSL or Git Bash)
+- [`uv`](https://github.com/astral-sh/uv) — `brew install uv`
+- **git** and **bash** (both already present on macOS / most Linux)
+- An AI agent supported by Spec Kit — Claude Code, Copilot, Gemini CLI,
+  Cursor, OpenCode, Windsurf, or one of 15+ others
+
+## 1. Install Spec Kit
+
+```bash
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+specify version
+```
+
+## 2. Clone the extension
+
+You only need to do this once per machine. The extension is installed
+in dev mode from a local clone — no npm install required.
+
+```bash
+mkdir -p ~/tekimax && cd ~/tekimax
+git clone https://github.com/TEKIMAX/speckit-security.git
+```
+
+## 3. Initialize Spec Kit inside your project
+
+`speckit-security` works in any Spec Kit project. You can start a
+new project or add Spec Kit to an existing one.
+
+### New project
+
+```bash
+specify init my-ai-app --ai claude
+cd my-ai-app
+```
+
+### Existing project (e.g. a Vite app)
+
+```bash
+cd ~/path/to/your-existing-project
+specify init . --ai claude
+```
+
+Replace `claude` with your agent of choice: `copilot`, `gemini`,
+`cursor-agent`, `opencode`, `windsurf`, etc.
+
+## 4. Install the extension
+
+```bash
+specify extension add --dev ~/tekimax/speckit-security
+specify extension list
+```
+
+You should see:
+
+```
+✓ TEKIMAX Secure SDD (v0.2.2)
+    Security-first extension for Spec Kit
+    Commands: 8 | Hooks: 5 | Status: Enabled
+```
+
+## 5. Copy the config template
+
+```bash
+cp .specify/extensions/tekimax-security/config/tekimax-security-config.template.yml \
+   .specify/extensions/tekimax-security/tekimax-security-config.yml
+```
+
+The defaults are safe. Customize later — see
+[Customization](/docs/customization).
+
+## 6. Install development rules (optional but recommended)
+
+```bash
+bash .specify/extensions/tekimax-security/scripts/bash/install-rules.sh
+```
+
+This writes a `DEVELOPMENT-RULES.md` into your project, appends the
+rules to `.specify/memory/constitution.md` (so every AI agent reads
+them at session start), and writes the short rules block to your
+agent-specific context file (`CLAUDE.md`, `AGENTS.md`, etc.).
+
+## 7. Use it in your AI agent
+
+Open your project in Claude Code, Copilot, Cursor, or whichever agent
+you initialized with. New slash commands are available:
+
+```
+/speckit.specify          add user authentication with passkeys
+/speckit.plan
+/speckit.tasks            ← before_implement hook auto-fires gate-check
+/speckit.implement        ← after_implement hook auto-fires audit
+/speckit.analyze          ← before_analyze hook prompts red-team
+```
+
+The `after_specify` hook will also prompt you to run
+`/speckit.tekimax-security.data-contract` automatically after Spec Kit
+finishes the specify phase.
+
+## 8. Verify the scripts work directly
+
+You can run the gate-check and audit scripts from your terminal too —
+no AI agent required:
+
+```bash
+bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh \
+  .specify/specs/F-001-my-feature.md
+
+bash .specify/extensions/tekimax-security/scripts/bash/audit.sh
+```
+
+Useful for pre-commit hooks, CI steps, and manual spot checks.
+
+## What you just got
+
+```
+my-ai-app/
+├── .specify/
+│   ├── memory/constitution.md      ← Rules read by every agent
+│   ├── specs/                       ← Your feature specs land here
+│   └── extensions/tekimax-security/ ← Full extension
+├── .claude/skills/                  ← 8 speckit-security skills
+│                                      (or .cursor/skills/, .opencode/command/, etc.)
+├── docs/DEVELOPMENT-RULES.md        ← Human-readable rules
+├── CLAUDE.md                        ← Short rules block for Claude
+└── (your existing project files — untouched)
+```
+
+## Next steps
+
+<Cards>
+  <Card title="How It Works" href="/docs/how-it-works" description="The six gates, the five hooks, the eight commands, and how they interact." />
+  <Card title="Commands Reference" href="/docs/commands" description="Every slash command the extension adds, with examples." />
+  <Card title="Customization" href="/docs/customization" description="Config file, template overrides, allowlists, env vars." />
+  <Card title="Agent Compatibility" href="/docs/agent-compatibility" description="Which agents are verified hands-on and which are inferred." />
+</Cards>

@@ -1,0 +1,99 @@
+---
+title: Agent Compatibility
+description: Which AI agents are verified hands-on with speckit-security, and which are inferred from Spec Kit's supported list.
+---
+
+`speckit-security` is **agent-neutral** — the extension ships
+generic Markdown command files and Spec Kit handles the translation
+into each AI agent's native format at install time.
+
+## Verified end-to-end
+
+These agents have been smoke-tested with a full install cycle:
+`specify init --ai <agent>`, `specify extension add --dev ...`,
+`specify extension list`, and execution of the `gate-check.sh` script
+from inside the installed project.
+
+| Agent | Install location | Format |
+|---|---|---|
+| **Claude Code** | `.claude/skills/speckit-tekimax-security-*/SKILL.md` | Markdown skill with frontmatter |
+| **OpenCode** | `.opencode/command/speckit.tekimax-security.*.md` | Markdown command |
+| **GitHub Copilot** | `.github/agents/*.agent.md` + `.github/prompts/*.prompt.md` | Agent + prompt files |
+| **Gemini CLI** | `.gemini/commands/speckit.tekimax-security.*.toml` | TOML command |
+| **Cursor** | `.cursor/skills/speckit-tekimax-security-*/SKILL.md` | Markdown skill |
+
+All seven `speckit-security` commands register cleanly on each agent
+(eight in v0.2.2 after the `install-rules` command was added), and
+the gate-check script runs end-to-end after install.
+
+## Supported by Spec Kit (inferred)
+
+These agents are listed in `specify init --ai <name>` but haven't
+been hands-on tested with `speckit-security`. They should work
+because Spec Kit handles the translation layer and the extension
+provides the same agent-neutral Markdown that it translates for the
+verified agents above.
+
+- `auggie`
+- `bob`
+- `codebuddy`
+- `codex`
+- `forge`
+- `iflow`
+- `junie`
+- `kilocode`
+- `kimi`
+- `kiro-cli`
+- `pi`
+- `qodercli`
+- `qwen`
+- `roo`
+- `shai`
+- `tabnine`
+- `trae`
+- `vibe` (Mistral Vibe)
+- `windsurf`
+- `generic` (fallback for unsupported agents)
+
+If you try one of these and it works, please open a PR upstream to
+move it into the "Verified" table. If it doesn't work, please open
+an issue with the exact `specify init` and `specify extension add`
+output.
+
+## Requirements regardless of agent
+
+- **Spec Kit** `>= 0.1.0` installed via `uv tool install specify-cli`
+- **Bash** (macOS + Linux supported; Windows requires WSL or Git Bash)
+- **Python 3** — used by helper scripts for JSON parsing and template
+  substitution
+
+## Testing on your agent of choice
+
+```bash
+# 1. Init a project with your target agent
+specify init test-app --ai <agent-name> --no-git
+
+# 2. Install the extension
+cd test-app
+specify extension add --dev /path/to/speckit-security
+
+# 3. Verify registration
+specify extension list
+# Should show: Commands: 8 | Hooks: 5 | Status: Enabled
+
+# 4. Verify the commands were translated into the agent's format
+specify extension info tekimax-security
+
+# 5. Run the gate-check script directly
+bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh --help 2>&1 || true
+```
+
+If all five steps succeed, the agent is functionally supported.
+
+## Reporting incompatibilities
+
+- **Open an issue** at https://github.com/TEKIMAX/speckit-security/issues
+- **Include** the agent name, spec-kit version, OS, and the exact
+  output of `specify extension add --dev` and `specify extension list`
+- **Do not** include prompts or conversation snippets — just the
+  commands you ran and their output
