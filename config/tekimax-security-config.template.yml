@@ -1,0 +1,58 @@
+# TEKIMAX Secure SDD — extension configuration
+# Copy to .specify/extensions/tekimax-security/tekimax-security-config.yml
+# and customize per project.
+
+enforcement: warn        # warn | strict — strict = hooks block, warn = hooks advise
+
+required_sections:
+  - "Data Contract"
+  - "AI Integration"
+  - "Security"
+  - "Verification"
+
+stack:
+  ai_gateway: <your-ai-gateway>
+  guardrails: <your-guardrail-provider>
+  pii_encryption: field-level-encryption
+  rbac: <your-rbac-provider>
+  runtime: <your-runtime>
+  schema: zod
+  storage: <your-storage>
+
+audit:
+  inline_prompt_patterns:
+    - "you\\s+are\\s+a"
+    - "as\\s+an\\s+ai"
+    - "^(system|assistant):"
+    - "<\\|system\\|>"
+  secret_patterns:
+    - "sk_live_"
+    - "sk_test_"
+    - "PRIVATE_KEY"
+    - "BEGIN RSA"
+    - "BEGIN OPENSSH"
+    - "xoxb-"
+    - "ghp_[0-9a-zA-Z]{36}"
+    - "AKIA[0-9A-Z]{16}"
+    - "AIza[0-9A-Za-z-_]{35}"
+  file_scope:
+    - "src/**/*.ts"
+    - "src/**/*.tsx"
+    - "src/**/*.js"
+    - "src/**/*.jsx"
+    - "src/**/*.py"
+  allowlist:
+    # Files allowed to import model SDKs directly (gateway internals only)
+    stack_direct_sdk:
+      - "src/ai/gateway.ts"
+
+red_team:
+  staging_url: "${SPECKIT_TEKIMAX_SECURITY_STAGING_URL}"
+  max_rps: 10
+  never_run_against:
+    - "prod"
+    - "production"
+
+gate_log:
+  path: ".tekimax-security/gate-log.jsonl"
+  audit_log_path: ".tekimax-security/audit-log.jsonl"

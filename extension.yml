@@ -1,0 +1,105 @@
+schema_version: "1.0"
+
+extension:
+  id: "tekimax-security"
+  name: "TEKIMAX Secure SDD"
+  version: "0.2.0"
+  description: "Security-first extension for Spec Kit — threat modeling, red teaming, AI guardrails, data contracts, and model governance gates."
+  author: "Christian Kaman (TEKIMAX) <support@tekimax.com>"
+  repository: "https://github.com/TEKIMAX/speckit-security"
+  homepage: "https://tekimax.com"
+  license: "Apache-2.0"
+
+requires:
+  speckit_version: ">=0.1.0"
+  commands:
+    - "speckit.specify"
+    - "speckit.plan"
+    - "speckit.tasks"
+
+provides:
+  commands:
+    - name: "speckit.tekimax-security.threat-model"
+      file: "commands/threat-model.md"
+      description: "Generate a STRIDE threat model for the current spec"
+
+    - name: "speckit.tekimax-security.data-contract"
+      file: "commands/data-contract.md"
+      description: "Declare the data contract (sources, schemas, PII, bias, drift)"
+
+    - name: "speckit.tekimax-security.model-governance"
+      file: "commands/model-governance.md"
+      description: "Pin model version, define eval criteria, rollback plan"
+
+    - name: "speckit.tekimax-security.guardrails"
+      file: "commands/guardrails.md"
+      description: "Generate input/output guardrail config for AI features"
+
+    - name: "speckit.tekimax-security.red-team"
+      file: "commands/red-team.md"
+      description: "Generate red team attack scenarios and run them"
+
+    - name: "speckit.tekimax-security.gate-check"
+      file: "commands/gate-check.md"
+      description: "Verify all security gates pass before implement/ship"
+
+    - name: "speckit.tekimax-security.audit"
+      file: "commands/audit.md"
+      description: "Full audit — inline prompts, secrets, stack compliance"
+
+  config:
+    - name: "tekimax-security-config.yml"
+      template: "config/tekimax-security-config.template.yml"
+      description: "Security policy configuration"
+      required: false
+
+hooks:
+  after_specify:
+    command: "speckit.tekimax-security.data-contract"
+    optional: true
+    prompt: "Declare the data contract now?"
+    description: "Ensure data sources, schemas, and PII handling are declared"
+
+  after_plan:
+    command: "speckit.tekimax-security.threat-model"
+    optional: true
+    prompt: "Run STRIDE threat model on the plan?"
+    description: "Catch security issues at design time"
+
+  before_implement:
+    command: "speckit.tekimax-security.gate-check"
+    optional: false
+    description: "Block implementation until security gates pass"
+
+  after_implement:
+    command: "speckit.tekimax-security.audit"
+    optional: false
+    description: "Scan for inline prompts, committed secrets, missing guardrails"
+
+  before_analyze:
+    command: "speckit.tekimax-security.red-team"
+    optional: true
+    prompt: "Generate red team scenarios before final analysis?"
+    description: "Adversarial testing before shipping"
+
+defaults:
+  enforcement: "warn"
+  required_sections:
+    - "Data Contract"
+    - "AI Integration"
+    - "Security"
+    - "Verification"
+  stack:
+    ai_gateway: "<configured>"
+    guardrails: "<configured>"
+    pii_encryption: "field-level-encryption"
+    rbac: "<configured>"
+
+tags:
+  - "security"
+  - "threat-modeling"
+  - "red-team"
+  - "guardrails"
+  - "ai-safety"
+  - "compliance"
+  - "tekimax"

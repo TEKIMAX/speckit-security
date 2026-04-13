@@ -1,0 +1,40 @@
+slug: {{FEATURE_SLUG}}
+spec: {{SPEC_ID}}
+version: 1.0.0
+owner: {{OWNER}}
+updated: {{DATE}}
+
+input:
+  max_length: 4000
+  blocked_patterns:
+    - "ignore previous instructions"
+    - "ignore all previous"
+    - "disregard"
+    - "system prompt"
+    - "reveal your instructions"
+    - "you are now"
+  allowed_languages:
+    - en
+  strip_html: true
+  reject_on_injection: true
+
+output:
+  max_length: 8000
+  redact_patterns:
+    - pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      replace: "[REDACTED-SSN]"
+    - pattern: "\\b\\d{16}\\b"
+      replace: "[REDACTED-CARD]"
+    - pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+      replace: "[REDACTED-EMAIL]"
+  banned_phrases: []
+  require_citations: false
+
+limits:
+  rate_per_user_per_minute: 60
+  cost_ceiling_usd_per_day: 50
+
+escalation:
+  on_blocked_input: log_and_reject
+  on_redacted_output: log_and_return
+  on_cost_exceeded: throttle

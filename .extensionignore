@@ -1,0 +1,15 @@
+# Files excluded from `specify extension add` copy
+
+# Git internals
+.git/
+.gitignore
+.github/
+
+# Dev-only
+tests/
+CONTRIBUTING.md
+docs/draft/
+
+# OS
+.DS_Store
+*.log

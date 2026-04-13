@@ -1,0 +1,26 @@
+id: {{EVAL_ID}}
+feature: {{SPEC_ID}}
+run_date: {{DATE}}
+owner: {{OWNER}}
+model: {{MODEL}}
+
+scenarios:
+  - name: happy-path
+    input: "<sample input>"
+    expected: "<expected shape or content>"
+    result: pending
+    latency_ms: 0
+    tokens_in: 0
+    tokens_out: 0
+    cost_usd: 0.0
+
+metrics:
+  accuracy: 0.0
+  p50_latency_ms: 0
+  p95_latency_ms: 0
+  cost_per_request_usd: 0.0
+  jailbreak_resistance: 0.0
+
+verdict: pending
+notes: |
+  <eval observations>
