@@ -13,6 +13,37 @@ contribution merged faster.
 By participating in this project, you agree to abide by the
 [Code of Conduct](CODE_OF_CONDUCT.md). Be kind, be precise, be helpful.
 
+## Development rules
+
+Read [docs/DEVELOPMENT-RULES.md](docs/DEVELOPMENT-RULES.md) before
+opening a PR. It covers:
+
+- Commit message rules — no internal context leaks, imperative mood
+- File structure — where hooks, scripts, templates, tests, docs live
+- Code organization — DRY, helper extraction when functions get complex
+- File length and complexity targets
+- Naming conventions
+- Inline documentation (explain *why*, not *what*)
+- Unit test rules — add a regression test with every bug fix
+- Readability and maintainability principles
+- Review checklist
+
+PRs that violate these rules will be asked to update before merge.
+
+## Running tests
+
+Zero-dependency shell tests live in [`tests/`](tests/). Run them with:
+
+```bash
+bash tests/run.sh                 # all tests
+bash tests/run.sh gate-check      # one suite
+bash tests/gate-check/pass-clean.sh  # one test
+```
+
+Every bug fix should land with a regression test. See
+[tests/README.md](tests/README.md) for the full testing guide and a
+copy-paste template for new tests.
+
 ## Ways to contribute
 
 - **Report bugs** — open an issue with reproduction steps

@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: "tekimax-security"
   name: "TEKIMAX Secure SDD"
-  version: "0.2.0"
+  version: "0.2.1"
   description: "Security-first extension for Spec Kit — threat modeling, red teaming, AI guardrails, data contracts, and model governance gates."
   author: "Christian Kaman (TEKIMAX) <support@tekimax.com>"
   repository: "https://github.com/TEKIMAX/speckit-security"
@@ -46,6 +46,10 @@ provides:
     - name: "speckit.tekimax-security.audit"
       file: "commands/audit.md"
       description: "Full audit — inline prompts, secrets, stack compliance"
+
+    - name: "speckit.tekimax-security.install-rules"
+      file: "commands/install-rules.md"
+      description: "Install a DEVELOPMENT-RULES.md into the project — commit hygiene, file structure, DRY, naming, inline docs, unit test rules"
 
   config:
     - name: "tekimax-security-config.yml"
