@@ -114,7 +114,7 @@ export default function HomePage() {
 
               <div className="mt-4 flex items-center gap-2 text-fd-muted-foreground">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Ready in under a minute · Zero runtime deps</span>
+                <span>Ready in under a minute · No npm or pip install</span>
               </div>
             </div>
           </div>

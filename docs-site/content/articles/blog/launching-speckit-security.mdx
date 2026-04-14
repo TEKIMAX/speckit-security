@@ -66,8 +66,9 @@ It adds **six security gates** to the SDD lifecycle:
    committed secrets anywhere in the repo, and `.env` files tracked
    by git.
 
-Each gate is a real POSIX bash script with no runtime dependencies.
-The scripts run on macOS and Linux, they complete in under a second,
+Each gate is a real POSIX bash script with no package-manager
+dependencies (just `bash` and `python3`, which every macOS and Linux
+system already ships). The scripts complete in under a second,
 and they append append-only JSONL entries to a gate log per feature
 so you get an audit trail for free.
 
