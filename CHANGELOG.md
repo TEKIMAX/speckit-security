@@ -3,7 +3,7 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
-## [Unreleased]
+## [0.2.6] — 2026-04-14
 
 ### Added
 
