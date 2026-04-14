@@ -15,9 +15,12 @@ const STARTER_QUESTIONS = [
   'What does speckit-security NOT do?',
 ];
 
+// Default is a same-origin path. A Cloudflare Worker Route on
+// speckit.tekimax.com/api/chat* routes this to the chat Worker.
+// Override with NEXT_PUBLIC_CHAT_ENDPOINT for local dev against
+// the workers.dev URL.
 const CHAT_ENDPOINT =
-  process.env.NEXT_PUBLIC_CHAT_ENDPOINT ||
-  'https://speckit-security-chat.christiank.workers.dev/api/chat';
+  process.env.NEXT_PUBLIC_CHAT_ENDPOINT || '/api/chat';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
