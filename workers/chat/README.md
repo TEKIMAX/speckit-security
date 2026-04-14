@@ -59,58 +59,51 @@ npx wrangler deploy
 > which is why this script is named `publish` instead of `deploy`.
 > `pnpm deploy` would error with `ERR_PNPM_CANNOT_DEPLOY`.
 
-## Rate limiting with Upstash
+## Rate limiting
 
 Cloudflare's native WAF rate limiting moved to enterprise-only
-tiers, so this Worker runs its own rate limiter via
-[`@upstash/ratelimit`](https://github.com/upstash/ratelimit) +
-Upstash Redis REST. Sliding window: **20 requests per 60 seconds
-per client IP** (`CF-Connecting-IP`).
+tiers, so this Worker uses **Cloudflare's built-in Workers Rate
+Limiting binding** instead. It's part of the Workers runtime,
+free, zero external services, no Redis, no secrets.
 
-**First time setup:**
+**Configured in `wrangler.toml`:**
 
-1. Create a free Upstash Redis database at
-   [console.upstash.com](https://console.upstash.com/) (free tier:
-   10,000 commands/day, enough for hundreds of thousands of chat
-   turns at 1 command per limit check).
-2. In the Upstash console, copy the **REST URL** and **REST token**
-   for your database.
-3. Set them as Worker secrets (never commit these):
+```toml
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+```
 
-   ```bash
-   cd workers/chat
-   npx wrangler secret put UPSTASH_REDIS_REST_URL
-   # paste the URL when prompted
-   npx wrangler secret put UPSTASH_REDIS_REST_TOKEN
-   # paste the token when prompted
-   ```
-4. Redeploy so the new secrets take effect:
+That's it. No setup, no secrets to configure, no Upstash account,
+no Redis server. The binding is activated on `wrangler deploy`
+automatically.
 
-   ```bash
-   npx wrangler deploy
-   ```
+**How the Worker uses it:**
 
-**Fail-open on missing config.** If either secret is absent the
-limiter logs a `console.warn` and passes every request through.
-This means a fresh `wrangler deploy` works even before secrets are
-set; rate limiting activates automatically once you've configured
-both.
+```ts
+const { success } = await env.RATE_LIMITER.limit({ key: clientIP });
+if (!success) return new Response('rate limit', { status: 429 });
+```
 
-**Adjusting the window.** Edit
-`Ratelimit.slidingWindow(20, '60 s')` in `src/index.ts`. The
-first number is request count, the second is window duration
-(supports `s`, `m`, `h`, `d`).
+**Current policy:** 20 requests per 60 seconds per client IP
+(keyed on `CF-Connecting-IP`). Adjust the `limit` and `period`
+values in `wrangler.toml` and redeploy to change it.
+
+**Why `unsafe.bindings`?** The native rate limiter binding is
+stable in production (Cloudflare ships it at scale) but its
+`wrangler.toml` schema still lives under `unsafe.bindings` because
+the config shape may change. No runtime stability risk.
 
 **What a rate-limited client sees:**
 
 ```
 HTTP/1.1 429 Too Many Requests
-Retry-After: 23
-X-RateLimit-Limit: 20
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1712000000000
+Retry-After: 60
+Content-Type: application/json
 
-{"error":"rate limit exceeded","retry_after_seconds":23}
+{"error":"rate limit exceeded","retry_after_seconds":60}
 ```
 
 First-time deploy: you'll need `wrangler login` (or a

@@ -11,11 +11,9 @@
 // Defenses, in order:
 //   1. CORS origin allowlist (ALLOWED_ORIGIN + localhost:3xxx)
 //   2. Input validation (message count, per-message size, total size)
-//   3. Upstash Ratelimit sliding window by client IP (20 req / 60s)
+//   3. Native Cloudflare rate limiter — 20 req / 60s per client IP
 //   4. Workers AI free tier + Cloudflare spend cap as final backstop
 
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis/cloudflare';
 import { DOCS_CONTEXT, DOCS_CONTEXT_BYTES } from './context.generated';
 
 type ChatRole = 'user' | 'assistant' | 'system';
@@ -27,40 +25,17 @@ interface ChatRequest {
   messages: ChatMessage[];
 }
 
+// Type for Cloudflare's native rate limiter binding. Not yet
+// exported from @cloudflare/workers-types at the time of writing,
+// so declared inline.
+interface RateLimiter {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+}
+
 interface Env {
   AI: Ai;
   ALLOWED_ORIGIN: string;
-  // Set via `wrangler secret put UPSTASH_REDIS_REST_URL` and
-  // `wrangler secret put UPSTASH_REDIS_REST_TOKEN`. If either is
-  // missing the rate limiter fails open with a console warning so
-  // a fresh deploy still works while you configure secrets.
-  UPSTASH_REDIS_REST_URL?: string;
-  UPSTASH_REDIS_REST_TOKEN?: string;
-}
-
-// Rate limiter is created once per isolate, not per request.
-// @upstash/ratelimit is stateless across requests; the state lives
-// in Upstash Redis.
-let ratelimit: Ratelimit | null = null;
-function getRatelimit(env: Env): Ratelimit | null {
-  if (ratelimit) return ratelimit;
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    console.warn(
-      'upstash rate limiter disabled: UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set',
-    );
-    return null;
-  }
-  const redis = new Redis({
-    url: env.UPSTASH_REDIS_REST_URL,
-    token: env.UPSTASH_REDIS_REST_TOKEN,
-  });
-  ratelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(20, '60 s'),
-    analytics: true,
-    prefix: 'speckit-chat',
-  });
-  return ratelimit;
+  RATE_LIMITER: RateLimiter;
 }
 
 function clientIdentifier(request: Request): string {
@@ -205,32 +180,25 @@ export default {
       });
     }
 
-    // Rate limit by client IP. Fails open if Upstash isn't
-    // configured yet — the fresh-deploy path still works.
-    const rl = getRatelimit(env);
-    if (rl) {
-      const identifier = clientIdentifier(request);
-      const { success, limit, remaining, reset } = await rl.limit(identifier);
-      if (!success) {
-        const retryAfter = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
-        return new Response(
-          JSON.stringify({
-            error: 'rate limit exceeded',
-            retry_after_seconds: retryAfter,
-          }),
-          {
-            status: 429,
-            headers: {
-              'Content-Type': 'application/json',
-              'Retry-After': String(retryAfter),
-              'X-RateLimit-Limit': String(limit),
-              'X-RateLimit-Remaining': String(remaining),
-              'X-RateLimit-Reset': String(reset),
-              ...corsHeaders(allowedOrigin),
-            },
+    // Rate limit by client IP via Cloudflare's native binding.
+    // Configured in wrangler.toml: 20 requests per 60 seconds.
+    const identifier = clientIdentifier(request);
+    const { success } = await env.RATE_LIMITER.limit({ key: identifier });
+    if (!success) {
+      return new Response(
+        JSON.stringify({
+          error: 'rate limit exceeded',
+          retry_after_seconds: 60,
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': '60',
+            ...corsHeaders(allowedOrigin),
           },
-        );
-      }
+        },
+      );
     }
 
     // Prepend the system prompt with the grounding corpus.

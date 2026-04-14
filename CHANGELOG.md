@@ -27,14 +27,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
   public URL so the model can cite pages.
 - "Ask AI" link in the main nav, `/chat/` entry in `sitemap.ts`,
   and Open Graph metadata for the chat page.
-- **Upstash rate limiting on the chat Worker.** Cloudflare's
-  native WAF rate limiting is now enterprise-only, so the Worker
-  ships its own sliding window limiter via `@upstash/ratelimit`
-  (20 req / 60s per client IP). Keyed on `CF-Connecting-IP`.
-  Fails open if `UPSTASH_REDIS_REST_URL` /
-  `UPSTASH_REDIS_REST_TOKEN` secrets aren't configured, so a
-  fresh deploy still works while you set them up. Chat UI renders
-  a friendly "you're sending messages too fast" error on 429s.
+- **Native Cloudflare rate limiting on the chat Worker.**
+  Cloudflare's native WAF rate limiting is now enterprise-only,
+  but Workers ship their own built-in rate limiter binding that's
+  free and part of the runtime. Configured in `wrangler.toml`
+  under `[[unsafe.bindings]]` (binding schema is pre-GA but the
+  runtime is stable): 20 requests per 60 seconds per client IP,
+  keyed on `CF-Connecting-IP`. Zero external services, no Redis,
+  no secrets, no Upstash account. Chat UI renders a friendly
+  "you're sending messages too fast" error on 429s.
 
 ## [0.2.5] — 2026-04-14
 
