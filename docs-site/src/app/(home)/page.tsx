@@ -52,6 +52,13 @@ export default function HomePage() {
             </a>
           </div>
 
+          <p className="max-w-xl text-xs text-fd-muted-foreground/80 italic mb-6 border-l-2 border-fd-border pl-3">
+            Not a complete security solution. One layer of the
+            spec-driven development lifecycle, designed to run alongside
+            SAST, dependency scanning, runtime monitoring, and your
+            existing compliance tooling.
+          </p>
+
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-fd-muted-foreground mb-3">
               Works with
