@@ -1,0 +1,15 @@
+name = "speckit-security-chat"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers AI binding — gives env.AI.run(model, { ... })
+[ai]
+binding = "AI"
+
+# CORS allowlist for the docs origin. Override per environment as needed.
+[vars]
+ALLOWED_ORIGIN = "https://speckit.tekimax.com"
+
+# Durable Objects or KV would be used for rate limiting in a future
+# iteration. v1 uses a simple per-invocation check.

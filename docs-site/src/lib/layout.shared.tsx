@@ -28,6 +28,10 @@ export function baseOptions(): BaseLayoutProps {
         url: '/docs',
       },
       {
+        text: 'Ask AI',
+        url: '/chat',
+      },
+      {
         text: 'Articles',
         url: '/articles',
       },
