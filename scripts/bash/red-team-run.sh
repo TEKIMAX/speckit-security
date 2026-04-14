@@ -13,6 +13,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+source "$SCRIPT_DIR/lib/config.sh"
+
 RT_PATH="${1:-}"
 if [ -z "$RT_PATH" ] || [ ! -f "$RT_PATH" ]; then
   echo "error: red-team report path missing or not a file: $RT_PATH" >&2
@@ -25,12 +29,11 @@ LOG_DIR=".tekimax-security"
 TRACE="$LOG_DIR/red-team-traces.jsonl"
 mkdir -p "$LOG_DIR"
 
-# Resolve staging URL — prefer env, fall back to config
+# Resolve staging URL — env wins, then config, then error
 STAGING_URL="${SPECKIT_TEKIMAX_SECURITY_STAGING_URL:-}"
-if [ -z "$STAGING_URL" ] && [ -f "$CONFIG" ]; then
-  # naive extraction of staging_url without requiring yq
-  STAGING_URL=$(grep -E '^[[:space:]]*staging_url:' "$CONFIG" | sed -E 's/^[^:]+:[[:space:]]*//; s/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/' || true)
-  # Expand env refs like ${SPECKIT_...}
+if [ -z "$STAGING_URL" ]; then
+  STAGING_URL=$(config_get "$CONFIG" "red_team.staging_url" || true)
+  # Expand env refs like ${SPECKIT_...} that the YAML hasn't resolved
   if [[ "$STAGING_URL" == \${*} ]]; then
     STAGING_URL=""
   fi
@@ -49,7 +52,16 @@ if echo "$STAGING_URL" | grep -qiE "(^|[^a-z])prod([^a-z]|$)|production"; then
   exit 2
 fi
 
-MAX_RPS="${SPECKIT_TEKIMAX_SECURITY_MAX_RPS:-10}"
+# Resolve max RPS — env wins, then config, then fall back to 10
+MAX_RPS="${SPECKIT_TEKIMAX_SECURITY_MAX_RPS:-}"
+if [ -z "$MAX_RPS" ]; then
+  MAX_RPS=$(config_get "$CONFIG" "red_team.max_rps" || true)
+fi
+MAX_RPS="${MAX_RPS:-10}"
+# Guard against non-numeric config values
+if ! [[ "$MAX_RPS" =~ ^[0-9]+$ ]] || [ "$MAX_RPS" -lt 1 ]; then
+  MAX_RPS=10
+fi
 DELAY_MS=$(( 1000 / MAX_RPS ))
 
 TS_START=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
