@@ -6,15 +6,24 @@
 > adds threat modeling (STRIDE), red teaming, AI guardrails, data
 > contracts, and model-governance gates to the SDD lifecycle.
 > Catches prompt injection, committed secrets, unpinned models, and
-> undeclared PII **before code ships**.
+> undeclared PII at the spec and artifact level, before
+> `/speckit.implement` generates the bulk of the feature code.
 
-**📘 Documentation: [speckit.tekimax.com](https://speckit.tekimax.com)**
+> **⚠️ One layer, not the whole program.** `speckit-security` is a
+> starting point, not a complete security solution. It catches a
+> specific class of AI-delivery issues at design and commit time.
+> Use it alongside your other security tooling — SAST, dependency
+> scanning, runtime monitoring, compliance platforms, penetration
+> testing — not as a replacement for any of them.
+
+**📘 Documentation: [speckit.tekimax.com](https://speckit.tekimax.com)** · **💬 Ask AI: [speckit.tekimax.com/chat](https://speckit.tekimax.com/chat)**
 
 [![Spec Kit Extension](https://img.shields.io/badge/spec--kit-extension-7c3aed)](https://github.com/github/spec-kit)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.4-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.6-green)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Docs](https://img.shields.io/badge/docs-speckit.tekimax.com-7c3aed)](https://speckit.tekimax.com)
+[![Ask AI](https://img.shields.io/badge/ask%20AI-chat-10b981)](https://speckit.tekimax.com/chat)
 [![Tests](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml/badge.svg)](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml)
 [![Made by TEKIMAX](https://img.shields.io/badge/made%20by-TEKIMAX-fbbf24)](https://tekimax.com)
 
@@ -54,6 +63,27 @@ follows automatically via Spec Kit hooks.
 
 ---
 
+## 💬 Ask AI — grounded docs chat
+
+Don't want to read everything? **[speckit.tekimax.com/chat](https://speckit.tekimax.com/chat)**
+is a conversational interface to the full docs. It's Llama 3.3 70B
+on Cloudflare Workers AI with every docs page and article
+embedded in the system prompt as a grounding corpus, so answers
+come from the docs and cite page URLs. If something isn't in the
+docs, the model says so instead of guessing.
+
+Use it to learn the six gates, the five hooks, the eight
+commands, the customization surface, or how spec-driven
+development fits together. It runs behind Cloudflare's native
+rate limiter (20 req / 60s per IP) and has no external
+dependencies.
+
+Source for the Worker and the context generator is in
+[`workers/chat/`](workers/chat/) and
+[`docs-site/scripts/build-chat-context.mjs`](docs-site/scripts/build-chat-context.mjs).
+
+---
+
 ## Installation
 
 > Requires [Spec Kit](https://github.com/github/spec-kit) `>= 0.1.0`.
@@ -68,7 +98,7 @@ specify extension add --dev /path/to/speckit-security
 
 # 3. Verify
 specify extension list
-# → ✓ TEKIMAX Secure SDD (v0.2.2)
+# → ✓ TEKIMAX Secure SDD (v0.2.6)
 #       Security-first extension for Spec Kit
 #       Commands: 8 | Hooks: 5 | Status: Enabled
 ```
@@ -115,8 +145,11 @@ agent (Claude Code, Copilot, Gemini CLI). The typical flow:
 | **E — Red Team** | VERIFY | Adversarial scenarios, no succeeded High/Critical attacks |
 | **F — Inline Content Scan** | IMPLEMENT | No inline prompts, no secrets, no `.env` committed |
 
-Each gate produces a signed entry in `.tekimax-security/gate-log.jsonl`
-for compliance audit trails.
+Each gate produces an append-only JSONL entry in
+`.tekimax-security/gate-log.jsonl` for compliance audit trails.
+Every run records the spec, phase, verdict, timestamp, user, and
+per-gate status, so you can reconstruct the decision trail for
+any feature that shipped.
 
 ---
 
@@ -144,10 +177,16 @@ stack:
 
 ## Reference stack
 
-The extension is **stack-agnostic** — it enforces the *existence* of
-security controls, not specific vendor choices. Configure your stack
-in `tekimax-security-config.yml`. Common categories you'll need to
-fill in:
+The extension is **vendor-agnostic** — it enforces the *existence*
+of security controls, not specific vendor choices. The current gate
+defaults are **TypeScript/Node-opinionated**: Gate A looks for
+`src/schemas/<slug>.ts` (Zod), and `audit.sh`'s direct-SDK check
+greps for `@google/genai`, `@anthropic-ai/sdk`, and `openai`. You
+can extend the secret patterns, inline-prompt patterns, and gateway
+allowlist via `tekimax-security-config.yml` (v0.2.5+); the scripts
+read user entries as additive extensions of the built-in defaults.
+
+Common categories you'll need to fill in:
 
 - **AI gateway** — middleware for all model calls (rate limit, cost ceiling, injection defense)
 - **Guardrail layer** — content safety filtering, both directions
@@ -157,10 +196,9 @@ fill in:
 - **Runtime** — where the code executes (edge / server)
 - **Monitoring** — drift, latency, cost
 
-Swap any of these in `tekimax-security-config.yml` to match your team's
-existing tools. See [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) for
-the full customization guide (config file, template overrides, hook
-toggling, allowlists, env vars, and more).
+See [the customization docs](https://speckit.tekimax.com/docs/customization)
+for the full list of config keys the scripts actually read today
+(and which ones are still hardcoded).
 
 > **This is one layer, not the whole program.** `speckit-security`
 > is a starting point. It enforces a specific class of checks at
@@ -190,10 +228,12 @@ Together, they compound quality instead of debt.
 - [x] **v0.2.2** — Rules bind the AI agent at runtime via constitution + context files
 - [x] **v0.2.3** — Audit precision fixes (build artifact exclusion, tighter secret patterns)
 - [x] **v0.2.4** — Inline-prompt precision (stop flagging legal prose)
+- [x] **v0.2.5** — Config read-back for audit and gate-check (user entries extend built-ins for secret patterns, inline-prompt patterns, and allowlist)
+- [x] **v0.2.6** — Docs chat (Ask AI) grounded in the full docs corpus, powered by Llama 3.3 70B on Cloudflare Workers AI, with native Cloudflare rate limiting
+- [x] **Spec Kit community catalog submission** ([PR #2215](https://github.com/github/spec-kit/pull/2215))
 - [ ] Formal plugin system for custom gates and audit checks
 - [ ] GitHub Actions workflow template for running gate-check in CI
 - [ ] Integration with DeepTeam for automated adversarial eval
-- [ ] Public community catalog submission
 
 ---
 
