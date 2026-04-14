@@ -5,7 +5,7 @@ description: The eight slash commands speckit-security adds to Spec Kit.
 
 `speckit-security` adds **eight slash commands** to whichever AI agent
 you're using. Every command is an agent-neutral Markdown file under
-`commands/` in the extension repo — Spec Kit translates each one into
+`commands/` in the extension repo, Spec Kit translates each one into
 the active agent's native format on install.
 
 | Command | One-line purpose |
@@ -15,7 +15,7 @@ the active agent's native format on install.
 | [`model-governance`](/docs/commands/model-governance) | Pin model version, define eval baselines, write rollback plan |
 | [`guardrails`](/docs/commands/guardrails) | Generate versioned system prompt + guardrail YAML for AI features |
 | [`gate-check`](/docs/commands/gate-check) | Run all six gates against the active spec, emit verdict |
-| [`audit`](/docs/commands/audit) | Post-implementation scan — inline prompts, secrets, direct SDKs |
+| [`audit`](/docs/commands/audit) | Post-implementation scan, inline prompts, secrets, direct SDKs |
 | [`red-team`](/docs/commands/red-team) | Generate adversarial scenarios; `--run` hits staging automatically |
 | [`install-rules`](/docs/commands/install-rules) | Install dev rules into docs, constitution, and agent context file |
 
@@ -40,7 +40,7 @@ This follows Spec Kit's extension command naming pattern:
 ## Which commands fire automatically
 
 Four of the eight commands are wired to Spec Kit phase hooks and fire
-automatically. The other four are manual — you invoke them when you
+automatically. The other four are manual, you invoke them when you
 need them.
 
 ### Automatic (via hooks)
@@ -53,10 +53,10 @@ need them.
 
 ### Manual
 
-- `model-governance` — run once at DESIGN time when adding an AI feature
-- `guardrails` — run once when adding an AI feature
-- `install-rules` — run once at project setup
-- `data-contract`, `threat-model`, `red-team` — can also be run manually
+- `model-governance`, run once at DESIGN time when adding an AI feature
+- `guardrails`, run once when adding an AI feature
+- `install-rules`, run once at project setup
+- `data-contract`, `threat-model`, `red-team`, can also be run manually
   if you opt out of the prompts
 
 ## Skipping a hook

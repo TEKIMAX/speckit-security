@@ -3,7 +3,7 @@ title: Agent Compatibility
 description: Which AI agents are verified hands-on with speckit-security, and which are inferred from Spec Kit's supported list.
 ---
 
-`speckit-security` is **agent-neutral** — the extension ships
+`speckit-security` is **agent-neutral**, the extension ships
 generic Markdown command files and Spec Kit handles the translation
 into each AI agent's native format at install time.
 
@@ -64,7 +64,7 @@ output.
 
 - **Spec Kit** `>= 0.1.0` installed via `uv tool install specify-cli`
 - **Bash** (macOS + Linux supported; Windows requires WSL or Git Bash)
-- **Python 3** — used by helper scripts for JSON parsing and template
+- **Python 3**, used by helper scripts for JSON parsing and template
   substitution
 
 ## Testing on your agent of choice
@@ -95,5 +95,5 @@ If all five steps succeed, the agent is functionally supported.
 - **Open an issue** at https://github.com/TEKIMAX/speckit-security/issues
 - **Include** the agent name, spec-kit version, OS, and the exact
   output of `specify extension add --dev` and `specify extension list`
-- **Do not** include prompts or conversation snippets — just the
+- **Do not** include prompts or conversation snippets, just the
   commands you ran and their output

@@ -6,9 +6,9 @@ description: The opinionated engineering discipline speckit-security enforces fo
 `speckit-security` ships with **two versions** of the development
 rules:
 
-- **Contributor rules** — [docs/DEVELOPMENT-RULES.md](https://github.com/TEKIMAX/speckit-security/blob/main/docs/DEVELOPMENT-RULES.md)
+- **Contributor rules**, [docs/DEVELOPMENT-RULES.md](https://github.com/TEKIMAX/speckit-security/blob/main/docs/DEVELOPMENT-RULES.md)
   in the repo. Apply to anyone contributing to the extension itself.
-- **User template** — [templates/development-rules.md](https://github.com/TEKIMAX/speckit-security/blob/main/templates/development-rules.md).
+- **User template**, [templates/development-rules.md](https://github.com/TEKIMAX/speckit-security/blob/main/templates/development-rules.md).
   Installed into your project by `/speckit.tekimax-security.install-rules`
   so your team inherits the same discipline.
 
@@ -17,30 +17,30 @@ stack-agnostic and designed to be customized per project.
 
 ## The nine sections
 
-1. **Commit message rules** — describe the change, not the process.
+1. **Commit message rules**, describe the change, not the process.
    No AI attribution, no conversation context, no scrub history.
-2. **File structure rules** — hooks stay in hooks, scripts in
+2. **File structure rules**, hooks stay in hooks, scripts in
    `scripts/`, templates in `templates/`, tests in `tests/`, docs in
    `docs/`.
-3. **Code organization and reuse** — DRY. Extract helpers when a
+3. **Code organization and reuse**, DRY. Extract helpers when a
    function exceeds 30 lines or does more than one thing.
-4. **File length and complexity** — target sizes per file type,
+4. **File length and complexity**, target sizes per file type,
    hard ceilings before splitting.
-5. **Naming conventions** — files, functions, variables, env vars.
-6. **Inline documentation** — comment *why*, not *what*.
-7. **Unit test rules** — every bug fix lands with a regression test,
+5. **Naming conventions**, files, functions, variables, env vars.
+6. **Inline documentation**, comment *why*, not *what*.
+7. **Unit test rules**, every bug fix lands with a regression test,
    incremental coverage, one-command runnable.
-8. **Readability and maintainability** — one idea per line, early
+8. **Readability and maintainability**, one idea per line, early
    returns, no magic numbers, readable at 3 AM.
-9. **Review checklist** — eleven items before opening a PR.
+9. **Review checklist**, eleven items before opening a PR.
 
 ## Runtime enforcement
 
 Installing the rules with `/speckit.tekimax-security.install-rules`
 writes to **three targets** so they actually bind the AI agent:
 
-1. `docs/DEVELOPMENT-RULES.md` — full human-readable reference
-2. `.specify/memory/constitution.md` — Spec Kit constitution, read by
+1. `docs/DEVELOPMENT-RULES.md`, full human-readable reference
+2. `.specify/memory/constitution.md`, Spec Kit constitution, read by
    every spec-kit-aware AI agent at session start
 3. Agent-specific context file (auto-detected from
    `.specify/init-options.json`):
@@ -54,7 +54,7 @@ writes to **three targets** so they actually bind the AI agent:
 | `windsurf` | `.windsurfrules` |
 | `opencode`, `codex`, `kiro-cli`, everything else | `AGENTS.md` |
 
-The script is idempotent — running it twice does not duplicate the
+The script is idempotent, running it twice does not duplicate the
 `## Development Rules` section. Pass `--force` to replace an existing
 section.
 
@@ -83,9 +83,9 @@ bash .specify/extensions/tekimax-security/scripts/bash/install-rules.sh
 
 Optional flags:
 
-- `--docs <path>` — override the default `docs/DEVELOPMENT-RULES.md` target
-- `--project-name <name>` — override project name detection
-- `--force` — replace an existing `## Development Rules` section
+- `--docs <path>`, override the default `docs/DEVELOPMENT-RULES.md` target
+- `--project-name <name>`, override project name detection
+- `--force`, replace an existing `## Development Rules` section
 
 See [`/speckit.tekimax-security.install-rules`](/docs/commands/install-rules)
 for the full command reference.

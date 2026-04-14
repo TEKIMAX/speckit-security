@@ -1,17 +1,17 @@
 ---
 title: FAQ
-description: Common questions about speckit-security — what it does, what it doesn't, and who it's for.
+description: Common questions about speckit-security, what it does, what it doesn't, and who it's for.
 ---
 
 ## Does it replace GitHub Spec Kit?
 
-No. `speckit-security` is a Spec Kit **extension** — it installs on
+No. `speckit-security` is a Spec Kit **extension**, it installs on
 top of Spec Kit and adds security gates to Spec Kit's existing
 phases. You still need Spec Kit (`specify` CLI) to use it.
 
 ## Is this a complete security solution?
 
-**No — and it's not trying to be.** `speckit-security` catches a
+**No, and it's not trying to be.** `speckit-security` catches a
 specific class of issues at a specific point in the lifecycle: it
 enforces that feature specs declare the required security sections,
 that model versions are pinned, that guardrail configs exist, and
@@ -33,7 +33,7 @@ It is **not** a replacement for:
 - External security audits
 
 Use it as **one layer** of your broader security program, not as the
-whole program. The project is designed to be extended — see
+whole program. The project is designed to be extended, see
 [Customization](/docs/customization) for the config, template
 override, and sibling-extension paths for adding your own checks.
 
@@ -56,7 +56,7 @@ fine on Windows, but the check scripts won't.
 
 ## Will it slow me down?
 
-The gates add friction at phase transitions — that's the point.
+The gates add friction at phase transitions, that's the point.
 Without them you ship faster in the short term and pay interest in
 debt, incidents, and rewrites later. With them you ship slightly
 slower in the short term and avoid the compounding cost.
@@ -89,21 +89,21 @@ valuable but it's about 20% of what the extension offers.
 
 The intended paths today are:
 
-1. **Config-level overrides** — edit
+1. **Config-level overrides**, edit
    `tekimax-security-config.yml` to add your own regex patterns,
    required spec sections, file-scope globs, and allowlists.
-2. **Template overrides** — drop replacement templates into
+2. **Template overrides**, drop replacement templates into
    `.specify/templates/overrides/` so your team's spec and guardrail
    templates are used instead of the bundled ones.
-3. **Fork the extension** — modify or add bash scripts directly,
+3. **Fork the extension**, modify or add bash scripts directly,
    then install with `specify extension add --dev` from your fork.
-4. **Sibling extension** — write a second Spec Kit extension that
+4. **Sibling extension**, write a second Spec Kit extension that
    coexists with `speckit-security` and hooks into the same
    lifecycle phases. Both extensions run their own gates.
 
 A formal plugin system (register a custom gate via config, no fork
 needed) is planned for a later release. If you have a concrete use
-case, **please open an issue** describing what you need — the API
+case, **please open an issue** describing what you need, the API
 will be shaped by real demand.
 
 See [Customization](/docs/customization) for the full details.
@@ -117,7 +117,7 @@ PRs must follow. Non-negotiable rules are listed in
 
 ## Where do I report a vulnerability?
 
-**security@tekimax.com** — see
+**security@tekimax.com**, see
 [SECURITY.md](https://github.com/TEKIMAX/speckit-security/blob/main/SECURITY.md)
 for the responsible disclosure policy, scope, and response SLAs. Do
 **not** open a public issue for security reports.

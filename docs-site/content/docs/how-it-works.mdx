@@ -27,11 +27,11 @@ gates on top of those phases via Spec Kit's hook system.
   HA["after_implement hook"]:::hook
   HN["before_analyze hook"]:::hook
 
-  GA["Gate A — Data Contract"]:::gate
-  GB["Gate B — Threat Model (STRIDE)"]:::gate
+  GA["Gate A, Data Contract"]:::gate
+  GB["Gate B, Threat Model (STRIDE)"]:::gate
   GC["Gates C + D + F (gate-check.sh)"]:::block
-  AU["audit.sh — inline prompts, secrets"]:::gate
-  GE["Gate E — Red Team (optional)"]:::gate
+  AU["audit.sh, inline prompts, secrets"]:::gate
+  GE["Gate E, Red Team (optional)"]:::gate
 
   S --> HS --> GA --> P
   P --> HP --> GB --> T
@@ -47,15 +47,15 @@ checkbox on a form. Gates emit pass / fail / skip verdicts and
 append a JSONL entry to an append-only gate log.
 
 <Cards>
-  <Card title="Gate A — Data Contract" description="Data Contract section + Zod schema file, no z.any()" />
-  <Card title="Gate B — Threat Model" description="Threat model section, no High/Critical unmitigated threats" />
-  <Card title="Gate C — Model Governance" description="No unpinned model versions, rollback plan documented" />
-  <Card title="Gate D — Guardrails" description="Guardrail YAML with blocked_patterns + redact_patterns" />
-  <Card title="Gate E — Red Team" description="Red team report file present (runner is separate)" />
-  <Card title="Gate F — Inline Content Scan" description="No inline system prompts, no committed secrets, no .env in git" />
+  <Card title="Gate A, Data Contract" description="Data Contract section + Zod schema file, no z.any()" />
+  <Card title="Gate B, Threat Model" description="Threat model section, no High/Critical unmitigated threats" />
+  <Card title="Gate C, Model Governance" description="No unpinned model versions, rollback plan documented" />
+  <Card title="Gate D, Guardrails" description="Guardrail YAML with blocked_patterns + redact_patterns" />
+  <Card title="Gate E, Red Team" description="Red team report file present (runner is separate)" />
+  <Card title="Gate F, Inline Content Scan" description="No inline system prompts, no committed secrets, no .env in git" />
 </Cards>
 
-### Gate A — Data Contract
+### Gate A, Data Contract
 
 Runs three checks against the active spec and its schemas:
 
@@ -64,12 +64,12 @@ Runs three checks against the active spec and its schemas:
 3. The schema file does not contain `z.any()` (which bypasses type safety)
 
 Blocks if any check fails. **Note:** the gate verifies the section
-and schema file exist — it does not parse the content of the section
+and schema file exist, it does not parse the content of the section
 or enforce what's inside it. The reviewer is responsible for
 validating that PII, bias, drift, and retention policies are actually
 declared.
 
-### Gate B — Threat Model
+### Gate B, Threat Model
 
 Runs two checks:
 
@@ -81,21 +81,21 @@ Runs two checks:
 Blocks if the section is missing or if the regex
 `[UNMITIGATED].*(High|Critical)` matches.
 
-### Gate C — Model Governance
+### Gate C, Model Governance
 
 Only applies to features with an AI integration (detected by the
 presence of `AI Integration` or `model:` in the spec). Runs two
 checks:
 
 1. The spec does not contain `latest` (anywhere) or `"stable"` (with
-   quotes) — both indicate an unpinned model version
+   quotes), both indicate an unpinned model version
 2. The spec contains the word `Rollback` (case-insensitive)
 
 Blocks on unpinned versions or missing rollback mention. **Note:**
-the gate verifies the rollback *mention* — it does not parse the
+the gate verifies the rollback *mention*, it does not parse the
 rollback plan to check triggers, target versions, or time budgets.
 
-### Gate D — Guardrails
+### Gate D, Guardrails
 
 Only runs when Gate C did not skip. Four checks:
 
@@ -107,7 +107,7 @@ Only runs when Gate C did not skip. Four checks:
 Blocks if any file is missing or if either pattern section is absent
 from the guardrail YAML.
 
-### Gate E — Red Team
+### Gate E, Red Team
 
 Checks that a file matching `red-team/RT-*-<slug>.md` exists. Skips
 with a warning if no file is found (red team is a VERIFY-phase
@@ -119,18 +119,18 @@ guards: refuses URLs matching `prod`/`production`, rate-limits to
 `max_rps` (default 10), and injects an `X-Red-Team` header. That
 script is triggered by the `red-team` command with the `--run` flag.
 
-### Gate F — Inline Content Scan
+### Gate F, Inline Content Scan
 
 Three checks, in order:
 
-1. **Inline prompts** — greps `src/**/*.{ts,tsx,js,jsx,py}` for
+1. **Inline prompts**, greps `src/**/*.{ts,tsx,js,jsx,py}` for
    patterns like `you are a`, `as an ai`, `<|system|>`
    (case-insensitive). Files with `gateway` in their path are
    excluded so the gateway client itself can reference model SDKs.
-2. **Committed secrets** — greps the whole repo (excluding
+2. **Committed secrets**, greps the whole repo (excluding
    `node_modules/`) for patterns including `sk_live_`, `PRIVATE_KEY`,
    `BEGIN RSA`, `AKIA[A-Z0-9]{16}`, and `AIza[A-Za-z0-9_-]{35}`.
-3. **`.env` in git** — runs `git ls-files` and checks for any path
+3. **`.env` in git**, runs `git ls-files` and checks for any path
    matching `^\.env(\..*)?$`.
 
 Blocks if any of the three checks finds a hit.
@@ -148,11 +148,11 @@ under the `hooks:` block.
 
 | Hook | Command it runs | Blocking? |
 |---|---|---|
-| `after_specify` | `data-contract` | Optional — prompts the user |
-| `after_plan` | `threat-model` | Optional — prompts the user |
-| `before_implement` | `gate-check` | **Required — blocks on failure** |
-| `after_implement` | `audit` | **Required — blocks on critical findings** |
-| `before_analyze` | `red-team` | Optional — prompts the user |
+| `after_specify` | `data-contract` | Optional, prompts the user |
+| `after_plan` | `threat-model` | Optional, prompts the user |
+| `before_implement` | `gate-check` | **Required, blocks on failure** |
+| `after_implement` | `audit` | **Required, blocks on critical findings** |
+| `before_analyze` | `red-team` | Optional, prompts the user |
 
 ## The eight commands
 
@@ -177,7 +177,7 @@ Every gate-check run appends a JSONL entry to
 ```
 
 Same for `audit.sh` → `.tekimax-security/audit-log.jsonl`. The log
-is append-only by convention — never rewrite or delete entries. This
+is append-only by convention, never rewrite or delete entries. This
 is the audit trail your compliance reviewer reads.
 
 ## Zero runtime dependencies

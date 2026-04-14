@@ -10,7 +10,7 @@ description: A security-first extension for GitHub Spec Kit that catches AI tech
 **security gates** to the spec-driven development lifecycle. It hooks
 directly into Spec Kit's `after_specify`, `after_plan`, `before_implement`,
 `after_implement`, and `before_analyze` phase transitions to catch AI
-technical debt at the point where it's cheapest to fix — in the spec,
+technical debt at the point where it's cheapest to fix, in the spec,
 before a single line of code is written.
 
 > **One layer, not the whole program.** `speckit-security` is a
@@ -18,8 +18,8 @@ before a single line of code is written.
 > specific class of AI-delivery issues at design and commit time. It
 > is **extensible**: every check is configurable, every template is
 > overridable, and every pattern can be customized per project. Use
-> it alongside your other security tooling — SAST, dependency
-> scanning, runtime monitoring, compliance platforms — not as a
+> it alongside your other security tooling (SAST, dependency
+> scanning, runtime monitoring, compliance platforms), not as a
 > replacement for any of them. See
 > [Customization](/docs/customization) and the
 > [FAQ entry on scope](/docs/faq#is-this-a-complete-security-solution)
@@ -51,7 +51,7 @@ before a single line of code is written.
 ## Why it exists
 
 Spec Kit turns specifications into code. It does **not** enforce
-security — no threat modeling, no AI guardrails, no red teaming, no
+security: no threat modeling, no AI guardrails, no red teaming, no
 model governance, no audit of inline prompts or committed secrets.
 
 In production AI systems, those are the gaps where compounding
@@ -86,7 +86,7 @@ and that code doesn't contain inline prompts or committed secrets.
 </div>
 
 **What the gates do not do:** they don't read the *content* of a PII
-strategy, bias audit, or rollback plan — they only verify the
+strategy, bias audit, or rollback plan. They only verify the
 sections or tokens are present. Rich content validation is the
 reviewer's job and the AI agent's job, not the script's.
 
@@ -131,7 +131,7 @@ dependencies beyond `bash` and `python3`.
   schema validation) without requiring specific vendors. Configure
   your stack in `tekimax-security-config.yml`.
 - **Agent-neutral.** Ships as a Spec Kit extension, so it works with
-  every agent Spec Kit supports — Claude Code, Copilot, Gemini CLI,
+  every agent Spec Kit supports: Claude Code, Copilot, Gemini CLI,
   Cursor, OpenCode, Windsurf, and 15+ others. Spec Kit handles the
   per-agent format translation.
 - **Zero runtime dependencies.** No npm install, no pip install. Just
@@ -143,7 +143,7 @@ dependencies beyond `bash` and `python3`.
 ## Open source, Apache-2.0
 
 `speckit-security` is maintained by [TEKIMAX](https://tekimax.com)
-and released under Apache-2.0. Contributions welcome — see
+and released under Apache-2.0. Contributions welcome, see
 [CONTRIBUTING.md](https://github.com/TEKIMAX/speckit-security/blob/main/CONTRIBUTING.md).
 
 Vulnerabilities: **security@tekimax.com** (see
