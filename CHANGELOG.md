@@ -3,6 +3,40 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.2.6] — 2026-04-14
+
+### Added
+
+- **Docs chat (Ask AI).** New `/chat` page on the docs site backed
+  by a Cloudflare Worker running Llama 3.3 70B via Workers AI. The
+  full docs corpus (~14k tokens) is embedded in the system prompt
+  as a grounding context, so the model only answers from what's
+  actually in the docs and cites page URLs when it does. No RAG,
+  no embeddings — the corpus is small enough to stuff into context.
+- `workers/chat/` — Cloudflare Worker source, wrangler config, and
+  deployment README. Zero external API keys required (Workers AI
+  uses a Cloudflare binding). CORS restricted to the docs origin
+  plus localhost for local development. Basic input validation
+  (message count, per-message size, total payload size).
+- `docs-site/scripts/build-chat-context.mjs` — build-time
+  generator that concatenates every `.mdx` under
+  `content/docs/` and `content/articles/` into
+  `workers/chat/src/context.generated.ts`. Strips frontmatter,
+  imports, `<Mermaid>`, and `<Cards>` blocks while preserving
+  prose, headings, and code fences. Tags each section with its
+  public URL so the model can cite pages.
+- "Ask AI" link in the main nav, `/chat/` entry in `sitemap.ts`,
+  and Open Graph metadata for the chat page.
+- **Native Cloudflare rate limiting on the chat Worker.**
+  Cloudflare's native WAF rate limiting is now enterprise-only,
+  but Workers ship their own built-in rate limiter binding that's
+  free and part of the runtime. Configured in `wrangler.toml`
+  under `[[unsafe.bindings]]` (binding schema is pre-GA but the
+  runtime is stable): 20 requests per 60 seconds per client IP,
+  keyed on `CF-Connecting-IP`. Zero external services, no Redis,
+  no secrets, no Upstash account. Chat UI renders a friendly
+  "you're sending messages too fast" error on 429s.
+
 ## [0.2.5] — 2026-04-14
 
 ### Added

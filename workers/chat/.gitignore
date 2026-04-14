@@ -1,0 +1,17 @@
+# Local dev secrets — NEVER commit. Use `wrangler secret put <KEY>`
+# for anything sensitive in production.
+.dev.vars
+.dev.vars.*
+
+# Wrangler state
+.wrangler/
+.mf/
+
+# Build / dep output
+node_modules/
+dist/
+.output/
+
+# Editor
+.DS_Store
+*.log

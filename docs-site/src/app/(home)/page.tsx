@@ -23,7 +23,7 @@ export default function HomePage() {
         {/* Left: headline, description, CTAs */}
         <div className="text-left">
           <div className="inline-flex items-center gap-2 rounded-full border border-fd-border bg-fd-card px-4 py-1.5 text-xs font-medium text-fd-muted-foreground mb-6">
-            <span className="text-fd-primary">v0.2.5</span>
+            <span className="text-fd-primary">v0.2.6</span>
             <span>·</span>
             <span>alpha</span>
             <span>·</span>

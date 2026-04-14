@@ -1,0 +1,21 @@
+name = "speckit-security-chat"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers AI binding — gives env.AI.run(model, { ... })
+[ai]
+binding = "AI"
+
+# CORS allowlist for the docs origin. Override per environment as needed.
+[vars]
+ALLOWED_ORIGIN = "https://speckit.tekimax.com"
+
+# Native Cloudflare Workers rate limiting binding.
+# 20 requests per 60 seconds per key. Keyed on client IP in code.
+# Free, built-in, no external service.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
