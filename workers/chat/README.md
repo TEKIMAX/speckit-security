@@ -50,8 +50,14 @@ changes.
 cd workers/chat
 pnpm install
 pnpm build:context
-pnpm deploy
+pnpm publish              # runs: wrangler deploy
+# or equivalently:
+npx wrangler deploy
 ```
+
+> `pnpm` has a built-in `deploy` command for workspace packaging,
+> which is why this script is named `publish` instead of `deploy`.
+> `pnpm deploy` would error with `ERR_PNPM_CANNOT_DEPLOY`.
 
 First-time deploy: you'll need `wrangler login` (or a
 `CLOUDFLARE_API_TOKEN` env var in CI) and a Workers AI quota on
