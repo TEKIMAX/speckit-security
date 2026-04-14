@@ -120,22 +120,31 @@ reviewer's job and the AI agent's job, not the script's.
 `} />
 
 Gates A–F are enforced by real bash scripts. Every run appends a
-signed JSONL entry to an append-only gate-log for compliance audit
-trails. The scripts are cross-platform POSIX bash with zero runtime
-dependencies beyond `bash` and `python3`.
+JSONL entry to an append-only gate log (`spec`, `phase`, `verdict`,
+`ts`, `user`, per-gate status) so you can reconstruct the decision
+trail for compliance review. The scripts run on macOS and Linux
+with only the standard Unix tools that ship with the OS, plus
+`python3` for a couple of helper scripts.
 
 ## Design principles
 
-- **Stack-agnostic.** The extension enforces the *existence* of
-  security controls (AI gateway, guardrails, PII encryption, RBAC,
-  schema validation) without requiring specific vendors. Configure
-  your stack in `tekimax-security-config.yml`.
+- **Vendor-agnostic, TypeScript-opinionated defaults.** The extension
+  enforces the *existence* of security controls (AI gateway,
+  guardrails, PII encryption, RBAC, schema validation) without
+  requiring specific vendors. The current gate defaults assume a
+  TypeScript/Node project: Gate A looks for `src/schemas/<slug>.ts`
+  (Zod), and the `audit.sh` direct-SDK check greps for
+  `@google/genai`, `@anthropic-ai/sdk`, and `openai`. Override the
+  paths and patterns in `tekimax-security-config.yml` for other
+  stacks.
 - **Agent-neutral.** Ships as a Spec Kit extension, so it works with
   every agent Spec Kit supports: Claude Code, Copilot, Gemini CLI,
   Cursor, OpenCode, Windsurf, and 15+ others. Spec Kit handles the
   per-agent format translation.
-- **Zero runtime dependencies.** No npm install, no pip install. Just
-  `bash` and `python3`. Runs in under a second.
+- **No package-manager dependencies.** No `npm install`, no
+  `pip install`. Just `bash`, `grep`, `sed`, `git` (which every
+  macOS and Linux system ships), plus `python3` for a couple of
+  helper scripts. Runs in under a second.
 - **Honest alpha.** v0.2.x is alpha and marked alpha. API may change.
   See the [Changelog](https://github.com/TEKIMAX/speckit-security/blob/main/CHANGELOG.md)
   for every release.

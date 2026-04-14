@@ -9,10 +9,17 @@ Spec Kit's native lifecycle has five phases: **specify**, **plan**,
 **tasks**, **implement**, **analyze**. `speckit-security` layers six
 gates on top of those phases via Spec Kit's hook system.
 
+The `after_specify` and `after_plan` hooks run **commands** that
+help the author *write* the data contract and threat model. The
+gates themselves (A–F) are then all executed by `gate-check.sh` at
+the `before_implement` hook — that's the single blocking step.
+`audit.sh` runs at `after_implement` for the post-code scan, and
+`red-team` runs at `before_analyze`.
+
 <Mermaid chart={`flowchart TB
   classDef phase fill:#171717,stroke:#7c3aed,stroke-width:2px,color:#f4f4f5,font-weight:bold
   classDef hook  fill:#0a0a0a,stroke:#525252,color:#a3a3a3,font-size:12px
-  classDef gate  fill:#1a0b2e,stroke:#7c3aed,color:#f4f4f5,font-size:12px
+  classDef cmd   fill:#1a0b2e,stroke:#7c3aed,color:#f4f4f5,font-size:12px
   classDef block fill:#2a0b0b,stroke:#ef4444,color:#fecaca,font-size:12px
 
   S["/speckit.specify"]:::phase
@@ -27,17 +34,17 @@ gates on top of those phases via Spec Kit's hook system.
   HA["after_implement hook"]:::hook
   HN["before_analyze hook"]:::hook
 
-  GA["Gate A, Data Contract"]:::gate
-  GB["Gate B, Threat Model (STRIDE)"]:::gate
-  GC["Gates C + D + F (gate-check.sh)"]:::block
-  AU["audit.sh, inline prompts, secrets"]:::gate
-  GE["Gate E, Red Team (optional)"]:::gate
+  DC["data-contract cmd<br/>(writes contract + schema)"]:::cmd
+  TM["threat-model cmd<br/>(writes STRIDE model)"]:::cmd
+  GC["gate-check.sh<br/>Gates A + B + C + D + E + F"]:::block
+  AU["audit.sh<br/>inline prompts, secrets, SDK imports"]:::block
+  RT["red-team cmd<br/>(scenarios + run)"]:::cmd
 
-  S --> HS --> GA --> P
-  P --> HP --> GB --> T
+  S --> HS --> DC --> P
+  P --> HP --> TM --> T
   T --> HI --> GC --> I
   I --> HA --> AU --> N
-  N --> HN --> GE
+  N --> HN --> RT
 `} />
 
 ## The six gates
@@ -127,9 +134,15 @@ Three checks, in order:
    patterns like `you are a`, `as an ai`, `<|system|>`
    (case-insensitive). Files with `gateway` in their path are
    excluded so the gateway client itself can reference model SDKs.
-2. **Committed secrets**, greps the whole repo (excluding
-   `node_modules/`) for patterns including `sk_live_`, `PRIVATE_KEY`,
-   `BEGIN RSA`, `AKIA[A-Z0-9]{16}`, and `AIza[A-Za-z0-9_-]{35}`.
+2. **Committed secrets**, greps `*.ts`, `*.tsx`, `*.js`, `*.py`
+   files across the repo (excluding `node_modules/`, `.git/`,
+   `.next/`, `out/`, `.source/`, `.wrangler/`, and `dist/`) for
+   `sk_live_`, `sk_test_`, `BEGIN (RSA|EC|OPENSSH) PRIVATE KEY`,
+   `ghp_` (GitHub personal tokens), `AKIA[A-Z0-9]{16}` (AWS), and
+   `AIza[A-Za-z0-9_-]{35}` (Google). The post-implementation
+   `audit.sh` scans an even wider set, including `xoxb-` Slack
+   tokens, `gho_`/`ghs_`, `DSA` and `ENCRYPTED` private keys, and
+   also inspects `.env*` files directly.
 3. **`.env` in git**, runs `git ls-files` and checks for any path
    matching `^\.env(\..*)?$`.
 
@@ -180,9 +193,14 @@ Same for `audit.sh` → `.tekimax-security/audit-log.jsonl`. The log
 is append-only by convention, never rewrite or delete entries. This
 is the audit trail your compliance reviewer reads.
 
-## Zero runtime dependencies
+## Runtime dependencies
 
-Every script in `scripts/bash/` runs on POSIX bash with only `grep`,
-`sed`, `python3`, and `git`. No npm install, no pip install, no
-language runtime beyond what ships with macOS and Linux. The full
-test suite runs in under a second.
+The scripts use only standard tools that already ship with macOS
+and Linux: `bash`, `grep`, `sed`, and `git`. `gate-check.sh` and
+`audit.sh` need nothing else. `install-rules.sh` and
+`red-team-run.sh` additionally shell out to `python3` for small
+inline snippets (regex parsing and JSON handling).
+
+No `npm install`. No `pip install`. No language runtime or package
+manager beyond what your OS already provides. The full test suite
+runs in under a second.
