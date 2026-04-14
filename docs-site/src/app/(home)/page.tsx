@@ -1,4 +1,19 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'speckit-security · Security gates for spec-driven development',
+  description:
+    'A GitHub Spec Kit extension that catches prompt injection, committed secrets, unpinned models, and undeclared PII before code ships. Eight commands, five hooks, six gates. Stack-agnostic and agent-neutral.',
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    title: 'speckit-security · Security gates for spec-driven development',
+    description:
+      'A GitHub Spec Kit extension that catches prompt injection, committed secrets, unpinned models, and undeclared PII before code ships.',
+    url: '/',
+  },
+};
 
 export default function HomePage() {
   return (

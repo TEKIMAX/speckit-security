@@ -91,8 +91,26 @@ export async function generateMetadata(props: {
   const page = articlesSource.getPage(slug);
   if (!page) return {};
 
+  const type = slug[0] === 'news' ? 'news' : 'blog';
+  const canonical = `/articles/${slug.join('/')}`;
+
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: { canonical },
+    openGraph: {
+      type: 'article',
+      title: page.data.title,
+      description: page.data.description,
+      url: canonical,
+      publishedTime: page.data.date,
+      authors: page.data.author ? [page.data.author] : undefined,
+      tags: [type, 'speckit-security', 'spec-driven development'],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.data.title,
+      description: page.data.description,
+    },
   };
 }
