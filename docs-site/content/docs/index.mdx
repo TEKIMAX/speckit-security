@@ -10,8 +10,9 @@ description: A security-first extension for GitHub Spec Kit that catches AI tech
 **security gates** to the spec-driven development lifecycle. It hooks
 directly into Spec Kit's `after_specify`, `after_plan`, `before_implement`,
 `after_implement`, and `before_analyze` phase transitions to catch AI
-technical debt at the point where it's cheapest to fix, in the spec,
-before a single line of code is written.
+technical debt at the cheapest point in the lifecycle: at the spec
+and artifact level, before `/speckit.implement` generates the bulk
+of the feature code.
 
 > **One layer, not the whole program.** `speckit-security` is a
 > **starting point**, not a complete security solution. It catches a
