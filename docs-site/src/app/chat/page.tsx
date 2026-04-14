@@ -17,7 +17,7 @@ const STARTER_QUESTIONS = [
 
 const CHAT_ENDPOINT =
   process.env.NEXT_PUBLIC_CHAT_ENDPOINT ||
-  'https://speckit-security-chat.tekimax.workers.dev/api/chat';
+  'https://speckit-security-chat.christiank.workers.dev/api/chat';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
