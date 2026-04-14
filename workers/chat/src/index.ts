@@ -8,9 +8,14 @@
 // embedded as the system prompt so the model answers from grounded
 // context only.
 //
-// CORS: only the configured ALLOWED_ORIGIN may call /api/chat.
-// Rate: rough per-request guardrails on input size and message count.
+// Defenses, in order:
+//   1. CORS origin allowlist (ALLOWED_ORIGIN + localhost:3xxx)
+//   2. Input validation (message count, per-message size, total size)
+//   3. Upstash Ratelimit sliding window by client IP (20 req / 60s)
+//   4. Workers AI free tier + Cloudflare spend cap as final backstop
 
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis/cloudflare';
 import { DOCS_CONTEXT, DOCS_CONTEXT_BYTES } from './context.generated';
 
 type ChatRole = 'user' | 'assistant' | 'system';
@@ -25,6 +30,43 @@ interface ChatRequest {
 interface Env {
   AI: Ai;
   ALLOWED_ORIGIN: string;
+  // Set via `wrangler secret put UPSTASH_REDIS_REST_URL` and
+  // `wrangler secret put UPSTASH_REDIS_REST_TOKEN`. If either is
+  // missing the rate limiter fails open with a console warning so
+  // a fresh deploy still works while you configure secrets.
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
+}
+
+// Rate limiter is created once per isolate, not per request.
+// @upstash/ratelimit is stateless across requests; the state lives
+// in Upstash Redis.
+let ratelimit: Ratelimit | null = null;
+function getRatelimit(env: Env): Ratelimit | null {
+  if (ratelimit) return ratelimit;
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    console.warn(
+      'upstash rate limiter disabled: UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set',
+    );
+    return null;
+  }
+  const redis = new Redis({
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  ratelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(20, '60 s'),
+    analytics: true,
+    prefix: 'speckit-chat',
+  });
+  return ratelimit;
+}
+
+function clientIdentifier(request: Request): string {
+  // Cloudflare injects the real client IP here; trusted because
+  // this Worker only runs inside CF's own edge.
+  return request.headers.get('CF-Connecting-IP') || 'anon';
 }
 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -161,6 +203,34 @@ export default {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(allowedOrigin) },
       });
+    }
+
+    // Rate limit by client IP. Fails open if Upstash isn't
+    // configured yet — the fresh-deploy path still works.
+    const rl = getRatelimit(env);
+    if (rl) {
+      const identifier = clientIdentifier(request);
+      const { success, limit, remaining, reset } = await rl.limit(identifier);
+      if (!success) {
+        const retryAfter = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+        return new Response(
+          JSON.stringify({
+            error: 'rate limit exceeded',
+            retry_after_seconds: retryAfter,
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': String(retryAfter),
+              'X-RateLimit-Limit': String(limit),
+              'X-RateLimit-Remaining': String(remaining),
+              'X-RateLimit-Reset': String(reset),
+              ...corsHeaders(allowedOrigin),
+            },
+          },
+        );
+      }
     }
 
     // Prepend the system prompt with the grounding corpus.

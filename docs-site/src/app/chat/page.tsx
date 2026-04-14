@@ -52,6 +52,13 @@ export default function ChatPage() {
         body: JSON.stringify({ messages: nextMessages }),
       });
 
+      if (res.status === 429) {
+        const retry = res.headers.get('Retry-After') || '60';
+        throw new Error(
+          `You're sending messages too fast. Try again in ${retry} seconds.`,
+        );
+      }
+
       if (!res.ok || !res.body) {
         const errText = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status}${errText ? `: ${errText}` : ''}`);
