@@ -3,13 +3,31 @@ title: Customization
 description: Config file, template overrides, hook toggling, allowlists, and environment variables.
 ---
 
-`speckit-security` is designed to be stack-agnostic. You can adapt it
-to your team's conventions, tools, and policies without forking the
-repo. This page walks through every supported customization point in
-v0.2.2.
+`speckit-security` is designed to be vendor-agnostic. You can adapt
+it to your team's conventions, tools, and policies without forking
+the repo. This page walks through every supported customization
+point in v0.2.4.
+
+<Callout type="warn">
+  **Config read-back is limited in v0.2.4.** The config schema
+  below is the full intended surface, but only a subset is actually
+  read by the scripts today:
+
+  - ✅ **Read now:** `red_team.staging_url`
+  - ⏳ **Planned (hardcoded in scripts today):** `required_sections`,
+    `audit.inline_prompt_patterns`, `audit.secret_patterns`,
+    `audit.file_scope`, `audit.allowlist.stack_direct_sdk`,
+    `red_team.max_rps`, `red_team.never_run_against`
+
+  To customize anything in the planned list today, either edit
+  `gate-check.sh` / `audit.sh` directly in your installed copy
+  under `.specify/extensions/tekimax-security/scripts/bash/`, or
+  fork the repo. Config-driven read-back is tracked as a v0.3.0
+  goal. If you need a specific knob, please [open an issue](https://github.com/TEKIMAX/speckit-security/issues).
+</Callout>
 
 <Callout type="info">
-  **No plugin system yet.** v0.2.2 does not expose a formal plugin
+  **No plugin system yet.** v0.2.4 does not expose a formal plugin
   system for registering custom commands, gates, or audit checks.
   That's a planned feature. For now, the customization paths below
   cover every real adjustment you can make today.
@@ -47,9 +65,11 @@ enforcement: warn        # warn = hooks advise but never block
 
 ### Stack declarations
 
-These are informational, the extension is stack-agnostic, so these
-values don't enforce specific vendors. They document what your team
-uses so threat models and gate checks can reference the right tools.
+These are purely informational today: the scripts don't read them.
+They document what your team uses so threat models, templates, and
+spec authors can reference the right tools. Treat them as metadata
+for humans and AI agents reading the config, not as enforcement
+knobs.
 
 ```yaml
 stack:
@@ -62,10 +82,10 @@ stack:
   storage: <your-storage>
 ```
 
-### Required spec sections
+### Required spec sections (planned)
 
-Tell the gate check which sections a feature spec must contain before
-it can proceed past SPECIFY:
+The intended config declares which sections a feature spec must
+contain:
 
 ```yaml
 required_sections:
@@ -75,8 +95,12 @@ required_sections:
   - "Verification"
 ```
 
-Add your own (e.g. `"Data Residency"` for EU-scoped projects) without
-modifying any extension code.
+⏳ **Not yet read by the scripts.** Today `gate-check.sh` hardcodes
+the section names it looks for (`## Data Contract` /
+`## 2. Data Contract`, `## Security / Threat Model` /
+`## Security`). To add a new required section today, edit the
+`check_section` calls in `gate-check.sh` directly, or fork the
+repo. Config-driven read-back is planned for a later release.
 
 ## 2. Environment variables
 
@@ -111,12 +135,20 @@ cp .specify/extensions/tekimax-security/templates/threat-model-stride.md \
 The AI agent will pick up your version on the next
 `/speckit.tekimax-security.threat-model` run.
 
-## 4. Allowlisting direct SDK imports
+## 4. Allowlisting direct SDK imports (hardcoded today)
 
 The post-implementation audit flags direct model SDK imports outside
-your AI gateway layer. If your gateway client needs to import a raw
-SDK (which it does), add its path to the allowlist so the audit
-doesn't flag it:
+your AI gateway layer. Today the allowlist is a **hardcoded path
+substring**: any file path containing `src/ai/gateway` is allowed.
+See `audit.sh:55`:
+
+```bash
+if [[ "$f" != *"src/ai/gateway"* ]]; then
+  add_finding "WARN" "direct-sdk-import: $f"
+fi
+```
+
+The intended config shape is:
 
 ```yaml
 audit:
@@ -126,11 +158,16 @@ audit:
       - "src/ai/gateway-test.ts"
 ```
 
-## 5. Adjusting secret and inline-prompt patterns
+⏳ **Not yet read by the scripts.** To allowlist a path that doesn't
+contain `src/ai/gateway`, either move your gateway client into that
+directory, or edit the substring in `audit.sh` directly in your
+installed copy.
 
-Both `gate-check.sh` and `audit.sh` detect committed secrets and
-inline prompts using configurable regex patterns. Override the
-defaults:
+## 5. Adjusting secret and inline-prompt patterns (hardcoded today)
+
+Both `gate-check.sh` and `audit.sh` use **hardcoded** regex patterns
+for inline prompts, secrets, and file scope. The intended config
+shape is:
 
 ```yaml
 audit:
@@ -138,24 +175,24 @@ audit:
     - "you[[:space:]]+are[[:space:]]+a"
     - "as[[:space:]]+an[[:space:]]+ai"
     - "<\\|system\\|>"
-    # Add your own, e.g. a company-specific marker
-    - "// PROMPT-START"
 
   secret_patterns:
     - "sk_live_"
     - "PRIVATE_KEY"
     - "BEGIN RSA"
-    # Add tokens specific to your stack
-    - "my_company_internal_"
 
   file_scope:
     - "src/**/*.ts"
     - "src/**/*.tsx"
     - "src/**/*.py"
-    # Add directories specific to your layout
-    - "workers/**/*.ts"
-    - "lib/ai/**/*.ts"
 ```
+
+⏳ **Not yet read by the scripts.** To change the current patterns
+today, edit the `grep -rIliE` lines in `gate-check.sh` (around
+line 124) and `audit.sh` (around line 33 and line 42). The
+built-in defaults cover the most common AWS, GCP, GitHub, Slack,
+and Stripe tokens plus PEM private keys, so most teams won't need
+to change them.
 
 ## 6. Red team runner configuration
 
@@ -168,11 +205,23 @@ red_team:
     - "production"
 ```
 
+What the script actually honors today:
+
+- ✅ `red_team.staging_url`, read by `red-team-run.sh` via naive
+  `grep`. The env var `SPECKIT_TEKIMAX_SECURITY_STAGING_URL` takes
+  precedence if both are set.
+- ⏳ `red_team.max_rps`, **not read from config**. Set the env var
+  `SPECKIT_TEKIMAX_SECURITY_MAX_RPS` instead (default: `10`).
+- ⏳ `red_team.never_run_against`, **not read from config**. The
+  script hardcodes a regex refusal on `(^|[^a-z])prod([^a-z]|$)`
+  and `production`, which cannot be bypassed or extended via
+  config today.
+
 <Callout type="warn">
   **Safety guardrail:** `red-team-run.sh` refuses any URL matching
   `(^|[^a-z])prod([^a-z]|$)|production`. Your staging URL must not
-  contain those tokens. This is enforced in the script itself and
-  cannot be bypassed via config.
+  contain those tokens. This is enforced in the script itself
+  (`red-team-run.sh:47`) and cannot be bypassed via config.
 </Callout>
 
 ## 7. Enabling / disabling hooks

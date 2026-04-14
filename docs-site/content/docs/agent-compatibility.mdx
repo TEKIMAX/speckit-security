@@ -22,9 +22,8 @@ from inside the installed project.
 | **Gemini CLI** | `.gemini/commands/speckit.tekimax-security.*.toml` | TOML command |
 | **Cursor** | `.cursor/skills/speckit-tekimax-security-*/SKILL.md` | Markdown skill |
 
-All seven `speckit-security` commands register cleanly on each agent
-(eight in v0.2.2 after the `install-rules` command was added), and
-the gate-check script runs end-to-end after install.
+All eight `speckit-security` commands register cleanly on each
+agent, and the gate-check script runs end-to-end after install.
 
 ## Supported by Spec Kit (inferred)
 
@@ -84,11 +83,20 @@ specify extension list
 # 4. Verify the commands were translated into the agent's format
 specify extension info tekimax-security
 
-# 5. Run the gate-check script directly
-bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh --help 2>&1 || true
+# 5. Run the gate-check script directly against a sample spec
+#    (it requires a real spec path, so create a stub first)
+mkdir -p .specify/specs
+cat > .specify/specs/F-000-smoke.md <<'EOF'
+## Data Contract
+## Security / Threat Model
+EOF
+bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh \
+  .specify/specs/F-000-smoke.md 2>&1 || true
 ```
 
-If all five steps succeed, the agent is functionally supported.
+If step 3 shows `Commands: 8 | Hooks: 5 | Status: Enabled` and
+step 5 runs the gate script (even if it reports gate failures on
+the stub spec), the agent is functionally supported.
 
 ## Reporting incompatibilities
 

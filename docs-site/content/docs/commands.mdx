@@ -10,14 +10,14 @@ the active agent's native format on install.
 
 | Command | One-line purpose |
 |---|---|
-| [`data-contract`](/docs/commands/data-contract) | Declare sources, schemas, PII strategy, bias audit, drift thresholds |
-| [`threat-model`](/docs/commands/threat-model) | Generate a STRIDE threat model for the active spec |
-| [`model-governance`](/docs/commands/model-governance) | Pin model version, define eval baselines, write rollback plan |
-| [`guardrails`](/docs/commands/guardrails) | Generate versioned system prompt + guardrail YAML for AI features |
-| [`gate-check`](/docs/commands/gate-check) | Run all six gates against the active spec, emit verdict |
-| [`audit`](/docs/commands/audit) | Post-implementation scan, inline prompts, secrets, direct SDKs |
-| [`red-team`](/docs/commands/red-team) | Generate adversarial scenarios; `--run` hits staging automatically |
-| [`install-rules`](/docs/commands/install-rules) | Install dev rules into docs, constitution, and agent context file |
+| `data-contract` | Declare sources, schemas, PII strategy, bias audit, drift thresholds |
+| `threat-model` | Generate a STRIDE threat model for the active spec |
+| `model-governance` | Pin model version, define eval baselines, write rollback plan |
+| `guardrails` | Generate versioned system prompt + guardrail YAML for AI features |
+| `gate-check` | Run all six gates against the active spec, emit verdict |
+| `audit` | Post-implementation scan, inline prompts, secrets, direct SDKs |
+| `red-team` | Generate adversarial scenarios; `--run` hits staging automatically |
+| `install-rules` | Install dev rules into docs, constitution, and agent context file |
 
 ## Naming convention
 
@@ -39,9 +39,9 @@ This follows Spec Kit's extension command naming pattern:
 
 ## Which commands fire automatically
 
-Four of the eight commands are wired to Spec Kit phase hooks and fire
-automatically. The other four are manual, you invoke them when you
-need them.
+Five of the eight commands are wired to Spec Kit phase hooks and fire
+automatically. Three are manual-only, you invoke them when you need
+them.
 
 ### Automatic (via hooks)
 
@@ -56,8 +56,10 @@ need them.
 - `model-governance`, run once at DESIGN time when adding an AI feature
 - `guardrails`, run once when adding an AI feature
 - `install-rules`, run once at project setup
-- `data-contract`, `threat-model`, `red-team`, can also be run manually
-  if you opt out of the prompts
+
+The three optional-prompt hooks (`data-contract`, `threat-model`,
+`red-team`) can also be invoked manually if you opt out of the
+prompts or want to re-run them later.
 
 ## Skipping a hook
 

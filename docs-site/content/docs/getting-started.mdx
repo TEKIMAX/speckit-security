@@ -60,7 +60,7 @@ specify extension list
 You should see:
 
 ```
-✓ TEKIMAX Secure SDD (v0.2.2)
+✓ TEKIMAX Secure SDD (v0.2.4)
     Security-first extension for Spec Kit
     Commands: 8 | Hooks: 5 | Status: Enabled
 ```
@@ -93,20 +93,25 @@ you initialized with. New slash commands are available:
 
 ```
 /speckit.specify          add user authentication with passkeys
+                          ← after_specify hook prompts data-contract
 /speckit.plan
-/speckit.tasks            ← before_implement hook auto-fires gate-check
-/speckit.implement        ← after_implement hook auto-fires audit
+                          ← after_plan hook prompts threat-model
+/speckit.tasks
+/speckit.implement        ← before_implement hook auto-fires gate-check
+                          ← after_implement hook auto-fires audit
 /speckit.analyze          ← before_analyze hook prompts red-team
 ```
 
-The `after_specify` hook will also prompt you to run
-`/speckit.tekimax-security.data-contract` automatically after Spec Kit
-finishes the specify phase.
+The `before_implement` hook runs `gate-check.sh` and blocks on any
+hard failure. The `after_implement` hook runs `audit.sh` and blocks
+on any critical finding. The other three hooks (`after_specify`,
+`after_plan`, `before_analyze`) are optional and prompt you before
+running.
 
 ## 8. Verify the scripts work directly
 
-You can run the gate-check and audit scripts from your terminal too , 
-no AI agent required:
+You can run the gate-check and audit scripts from your terminal
+directly, no AI agent required:
 
 ```bash
 bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh \

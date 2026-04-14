@@ -89,14 +89,19 @@ valuable but it's about 20% of what the extension offers.
 
 The intended paths today are:
 
-1. **Config-level overrides**, edit
-   `tekimax-security-config.yml` to add your own regex patterns,
-   required spec sections, file-scope globs, and allowlists.
+1. **Edit your installed scripts**, open
+   `.specify/extensions/tekimax-security/scripts/bash/gate-check.sh`
+   or `audit.sh` and change the hardcoded regex / section names
+   directly. In v0.2.4 the config file is mostly read by humans,
+   not the scripts (see [Customization](/docs/customization) for
+   which keys are actually honored).
 2. **Template overrides**, drop replacement templates into
    `.specify/templates/overrides/` so your team's spec and guardrail
    templates are used instead of the bundled ones.
 3. **Fork the extension**, modify or add bash scripts directly,
    then install with `specify extension add --dev` from your fork.
+   Please also open an issue upstream if the change is broadly
+   useful so it can be merged back.
 4. **Sibling extension**, write a second Spec Kit extension that
    coexists with `speckit-security` and hooks into the same
    lifecycle phases. Both extensions run their own gates.
