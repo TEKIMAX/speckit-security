@@ -8,6 +8,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/config.sh
+source "$SCRIPT_DIR/lib/config.sh"
+
 SPEC_PATH="${1:-}"
 if [ -z "$SPEC_PATH" ] || [ ! -f "$SPEC_PATH" ]; then
   echo "error: spec path missing or not a file: $SPEC_PATH" >&2
@@ -19,6 +23,69 @@ CONFIG="$EXT_DIR/tekimax-security-config.yml"
 LOG_DIR=".tekimax-security"
 GATE_LOG="$LOG_DIR/gate-log.jsonl"
 mkdir -p "$LOG_DIR"
+
+# --- Config-driven pattern sets (Gate F) ----------------------------
+#
+# Gate F's inline-prompt and secret checks read their patterns from
+# the project config with built-in fallbacks. See docs/customization
+# for the config schema. Missing or empty config keys fall back to
+# the built-ins.
+
+DEFAULT_INLINE_PROMPT_RE='([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])'
+
+DEFAULT_SECRET_PATTERNS=(
+  'sk_live_[0-9a-zA-Z]{24,}'
+  'sk_test_[0-9a-zA-Z]{24,}'
+  '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
+  'ghp_[0-9a-zA-Z]{36}'
+  'AKIA[0-9A-Z]{16}'
+  'AIza[0-9A-Za-z_\-]{35}'
+)
+
+DEFAULT_GATEWAY_ALLOWLIST=(
+  'src/ai/gateway'
+)
+
+USER_INLINE_PROMPT_PATTERNS=()
+while IFS= read -r item; do
+  [ -n "$item" ] && USER_INLINE_PROMPT_PATTERNS+=("$item")
+done < <(config_list "$CONFIG" "audit.inline_prompt_patterns")
+
+USER_SECRET_PATTERNS=()
+while IFS= read -r item; do
+  [ -n "$item" ] && USER_SECRET_PATTERNS+=("$item")
+done < <(config_list "$CONFIG" "audit.secret_patterns")
+
+USER_GATEWAY_ALLOWLIST=()
+while IFS= read -r item; do
+  [ -n "$item" ] && USER_GATEWAY_ALLOWLIST+=("$item")
+done < <(config_list "$CONFIG" "audit.allowlist.stack_direct_sdk")
+
+INLINE_PROMPT_RE="$DEFAULT_INLINE_PROMPT_RE"
+for p in "${USER_INLINE_PROMPT_PATTERNS[@]}"; do
+  INLINE_PROMPT_RE="${INLINE_PROMPT_RE}|${p}"
+done
+
+SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" "${USER_SECRET_PATTERNS[@]}")
+SECRET_RE=""
+for p in "${SECRET_PATTERNS[@]}"; do
+  if [ -z "$SECRET_RE" ]; then
+    SECRET_RE="$p"
+  else
+    SECRET_RE="${SECRET_RE}|${p}"
+  fi
+done
+
+GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" "${USER_GATEWAY_ALLOWLIST[@]}")
+is_gateway_allowed() {
+  local path="$1"
+  for allow in "${GATEWAY_ALLOWLIST[@]}"; do
+    if [[ "$path" == *"$allow"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 SPEC_ID=$(basename "$SPEC_PATH" .md | grep -oE '^(F|SEC|ADR|INT)-[0-9]+' || echo "UNKNOWN")
 SPEC_SLUG=$(basename "$SPEC_PATH" .md | sed -E 's/^(F|SEC|ADR|INT)-[0-9]+-//')
@@ -121,15 +188,20 @@ fi
 # Gate F — Inline Content Scan
 INLINE_HIT=0
 if [ -d src ]; then
-  hits=$(grep -rIliE "([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])" \
+  raw_hits=$(grep -rIliE "$INLINE_PROMPT_RE" \
        --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" \
-       src 2>/dev/null | grep -v "gateway" || true)
-  if [ -n "$hits" ]; then
-    INLINE_HIT=1
-  fi
+       src 2>/dev/null || true)
+  # Drop allowlisted files
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if ! is_gateway_allowed "$f"; then
+      INLINE_HIT=1
+      break
+    fi
+  done <<< "$raw_hits"
 fi
 SECRET_HIT=0
-if grep -rIl -E "(sk_live_[0-9a-zA-Z]{24,}|sk_test_[0-9a-zA-Z]{24,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|ghp_[0-9a-zA-Z]{36}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35})" \
+if grep -rIl -E "($SECRET_RE)" \
      --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" \
      . 2>/dev/null | grep -vE "(node_modules|\.git/|\.next/|out/|\.source/|\.wrangler/|dist/)" | grep -q .; then
   SECRET_HIT=1

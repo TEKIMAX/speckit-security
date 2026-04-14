@@ -89,12 +89,13 @@ valuable but it's about 20% of what the extension offers.
 
 The intended paths today are:
 
-1. **Edit your installed scripts**, open
-   `.specify/extensions/tekimax-security/scripts/bash/gate-check.sh`
-   or `audit.sh` and change the hardcoded regex / section names
-   directly. In v0.2.4 the config file is mostly read by humans,
-   not the scripts (see [Customization](/docs/customization) for
-   which keys are actually honored).
+1. **Config-level overrides**, edit
+   `.specify/extensions/tekimax-security/tekimax-security-config.yml`
+   to extend the built-in secret patterns, inline-prompt patterns,
+   and direct-SDK allowlist. User entries are additive, so you
+   keep the defaults plus your custom rules. See
+   [Customization](/docs/customization) for the full list of keys
+   the scripts actually read and which are still hardcoded.
 2. **Template overrides**, drop replacement templates into
    `.specify/templates/overrides/` so your team's spec and guardrail
    templates are used instead of the bundled ones.

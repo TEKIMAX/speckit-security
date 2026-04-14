@@ -196,11 +196,13 @@ is the audit trail your compliance reviewer reads.
 ## Runtime dependencies
 
 The scripts use only standard tools that already ship with macOS
-and Linux: `bash`, `grep`, `sed`, and `git`. `gate-check.sh` and
-`audit.sh` need nothing else. `install-rules.sh` and
-`red-team-run.sh` additionally shell out to `python3` for small
-inline snippets (regex parsing and JSON handling).
+and Linux: `bash`, `grep`, `sed`, `git`, and `python3`. The shared
+`lib/config.sh` helper shells out to `python3` for a small inline
+YAML reader so each script can fall back to config-defined
+patterns, allowlists, and thresholds. `install-rules.sh` and
+`red-team-run.sh` also use `python3` for JSON handling.
 
-No `npm install`. No `pip install`. No language runtime or package
-manager beyond what your OS already provides. The full test suite
-runs in under a second.
+No `npm install`. No `pip install`. No third-party Python packages,
+just the standard library. No language runtime or package manager
+beyond what your OS already provides. The full test suite runs in
+under a second.

@@ -3,6 +3,58 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.2.5] — 2026-04-14
+
+### Added
+
+- **Config read-back for `audit.sh` and `gate-check.sh`.** User
+  entries in `tekimax-security-config.yml` now actually extend the
+  built-in defaults at runtime, instead of being ignored. Supported
+  config keys:
+  - `audit.allowlist.stack_direct_sdk` — additional substrings
+    treated as "gateway" paths for the direct-SDK-import check
+    and Gate F inline-prompt suppression
+  - `audit.secret_patterns` — additional ERE alternations for the
+    committed-secret scan in both Gate F and the post-implementation
+    audit
+  - `audit.inline_prompt_patterns` — additional ERE alternations
+    for inline-prompt detection in both Gate F and the audit
+- **Config read-back for `red-team-run.sh`.** `red_team.max_rps`
+  is now read from config (env var still takes precedence).
+  `red_team.staging_url` already worked, now goes through the
+  shared `config.sh` helper.
+- **`scripts/bash/lib/config.sh`** — sourceable YAML reader helper.
+  Exposes `config_get` (scalar) and `config_list` (list of strings)
+  by dotted path. Missing files and missing keys return empty so
+  callers can fall back to defaults without special-casing errors.
+  Uses `python3` with the standard library only (no third-party
+  YAML package required).
+- Four new tests covering the parser at depths 1–3, the audit
+  allowlist extension, and the audit secret-pattern extension.
+
+### Changed
+
+- Gate F inline-prompt detection now uses the shared allowlist
+  (`is_gateway_allowed`), which matches full path substrings like
+  `src/ai/gateway` instead of the previous behavior of excluding
+  any file with the literal substring "gateway" anywhere in the
+  path. This is stricter by default; projects that previously
+  relied on the loose `-v gateway` filter should add their
+  gateway path to `audit.allowlist.stack_direct_sdk` in config.
+- `gate-check.sh` and `audit.sh` now invoke `python3` (via the
+  shared config reader). Previously only `install-rules.sh` and
+  `red-team-run.sh` needed python3; now all four do. No new
+  third-party dependencies — standard library only.
+- Docs under `docs/customization` rewritten to match actual
+  read-back behavior.
+
+### Not yet config-driven (tracked for a later release)
+
+- `required_sections` (Gate A/B header text remains hardcoded)
+- `audit.file_scope` (grep `--include` flags remain hardcoded)
+- `red_team.never_run_against` (intentionally hardcoded as a
+  defense-in-depth safety guardrail)
+
 ## [0.2.4] — 2026-04-13
 
 ### Fixed
