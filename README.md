@@ -27,10 +27,13 @@
 [![Tests](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml/badge.svg)](https://github.com/TEKIMAX/speckit-security/actions/workflows/test.yml)
 [![Made by TEKIMAX](https://img.shields.io/badge/made%20by-TEKIMAX-fbbf24)](https://tekimax.com)
 
-> **Built on top of [GitHub Spec Kit](https://github.com/github/spec-kit).**
-> Spec Kit handles the spec-driven development lifecycle; this extension
-> layers security gates on top. Install Spec Kit first, then add this
-> extension alongside it.
+> **Community extension for [GitHub Spec Kit](https://github.com/github/spec-kit).**
+> This is an independent, third-party extension built by
+> [TEKIMAX](https://tekimax.com). It is **not** officially endorsed,
+> approved, or maintained by GitHub. Spec Kit handles the spec-driven
+> development lifecycle; this extension layers security gates on top
+> using Spec Kit's public extension API. Install Spec Kit first, then
+> add this extension alongside it.
 
 ---
 
