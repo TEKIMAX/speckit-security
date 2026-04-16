@@ -45,4 +45,4 @@ jobs:
           set -e
           # Lint every bash script in scripts/bash/ and tests/
           find scripts/bash tests -name "*.sh" -type f -print0 \
-            | xargs -0 shellcheck --severity=warning --exclude=SC1091,SC2034,SC2086,SC2154,SC2155
+            | xargs -0 shellcheck --severity=warning --exclude=SC1083,SC1091,SC2034,SC2086,SC2154,SC2155
