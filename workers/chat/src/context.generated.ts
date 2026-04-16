@@ -732,7 +732,7 @@ specify extension list
 You should see:
 
 \`\`\`
-✓ TEKIMAX Secure SDD (v0.2.5)
+✓ TEKIMAX Secure SDD (v0.2.6)
     Security-first extension for Spec Kit
     Commands: 8 | Hooks: 5 | Status: Enabled
 \`\`\`
@@ -987,7 +987,7 @@ URL: /docs
 Description: A security-first extension for GitHub Spec Kit that catches AI technical debt before code ships.
 ## What is speckit-security?
 
-\`speckit-security\` is an extension for
+\`speckit-security\` is a **community extension** for
 [GitHub Spec Kit](https://github.com/github/spec-kit) that adds
 **security gates** to the spec-driven development lifecycle. It hooks
 directly into Spec Kit's \`after_specify\`, \`after_plan\`, \`before_implement\`,
@@ -995,6 +995,12 @@ directly into Spec Kit's \`after_specify\`, \`after_plan\`, \`before_implement\`
 technical debt at the cheapest point in the lifecycle: at the spec
 and artifact level, before \`/speckit.implement\` generates the bulk
 of the feature code.
+
+> **Disclaimer:** \`speckit-security\` is an independent, third-party
+> extension built and maintained by [TEKIMAX](https://tekimax.com).
+> It is **not** officially endorsed, approved, or maintained by GitHub.
+> It uses Spec Kit's public extension API and community catalog. GitHub
+> and Spec Kit are trademarks of GitHub, Inc.
 
 > **One layer, not the whole program.** \`speckit-security\` is a
 > **starting point**, not a complete security solution. It catches a
@@ -1093,6 +1099,699 @@ Vulnerabilities: **security@tekimax.com** (see
 [SECURITY.md](https://github.com/TEKIMAX/speckit-security/blob/main/SECURITY.md)).
 
 General questions: **support@tekimax.com**.
+
+---
+
+=== DOCS PAGE: Sandbox (Experimental) ===
+URL: /docs/sandbox/index
+Description: Run speckit-security gate scripts inside a sandboxed environment for defense-in-depth isolation.
+> **Experimental.** Everything on this page is exploratory. APIs,
+> integration patterns, and supported runtimes may change without
+> notice. Do not depend on sandbox support in production CI pipelines
+> until it graduates from experimental status.
+
+## Why sandbox?
+
+By default, speckit-security scripts run directly on the host shell.
+They have [project-root confinement](/docs/security) via
+\`require_inside_project\`, but that's a **check**, not a **boundary**
+-- a bug in the scripts or a crafted input could still access the
+host filesystem or network.
+
+A sandbox adds a real isolation boundary:
+
+| Layer | What it prevents |
+|-------|------------------|
+| **Filesystem isolation** | Scripts can only see files you explicitly mount -- no \`/etc\`, no \`~/.ssh\`, no sibling repos |
+| **Network disabled** | Gate scripts have no reason to make network calls -- sandbox enforces it at the runtime level |
+| **Execution limits** | Malicious spec files cannot trigger infinite loops or fork bombs |
+| **Write isolation** | Scripts read your real project files but writes go to an in-memory layer -- the real project is never modified |
+
+## When to use a sandbox
+
+- **Untrusted specs.** Running gate-check against a spec file from an
+  external contributor or a pull request you haven't reviewed yet.
+- **CI on shared runners.** If your CI runner processes multiple repos,
+  sandboxing prevents cross-repo information leakage.
+- **Web-based gate runners.** If you build a UI that lets users run
+  gate-check from a browser, the sandbox is essential.
+- **Defense in depth.** Even if you trust the input, sandboxing limits
+  the blast radius of any bug in the scripts themselves.
+
+## When you don't need it
+
+- **Local development.** If you're the only person running the scripts
+  on your own machine against your own specs, the built-in
+  \`require_inside_project\` confinement is sufficient.
+- **Trusted CI.** If your CI only processes your own repo and the
+  runner is ephemeral (e.g. GitHub Actions), host isolation is already
+  provided by the runner VM.
+
+## Available sandbox runtimes
+
+More runtimes may be added as the ecosystem matures. Contributions
+welcome -- see [CONTRIBUTING.md](https://github.com/TEKIMAX/speckit-security/blob/main/CONTRIBUTING.md).
+
+---
+
+=== DOCS PAGE: just-bash ===
+URL: /docs/sandbox/just-bash
+Description: Run speckit-security gate scripts inside Vercel Labs' just-bash virtual bash environment for filesystem and network isolation.
+> **Experimental.** This integration is exploratory. It works for
+> a subset of the gate scripts today and has known limitations.
+> Do not depend on it in production without testing your specific
+> workflow end-to-end.
+
+## What is just-bash?
+
+[just-bash](https://github.com/vercel-labs/just-bash) is a virtual
+bash environment by Vercel Labs. It runs ~80 Unix commands
+(grep, sed, cat, find, awk, jq, etc.) in a TypeScript process with
+an in-memory filesystem. Network access is disabled by default.
+
+It is **not** a full Linux VM. It's a purpose-built shell emulator
+designed for AI agents that need a sandboxed execution environment.
+
+**Repository:** [github.com/vercel-labs/just-bash](https://github.com/vercel-labs/just-bash)
+**License:** Apache-2.0
+
+## Why use it with speckit-security?
+
+speckit-security scripts normally run directly on the host shell.
+The built-in [project-root confinement](/docs/security) validates
+file paths, but it's a check, not a boundary. \`just-bash\` adds a
+real isolation layer:
+
+- **Filesystem isolation** -- scripts only see files you explicitly
+  load. No \`/etc\`, no \`~/.ssh\`, no sibling repos.
+- **Network disabled** -- gate scripts cannot make HTTP calls
+  (the red-team runner is excluded from sandbox use for this reason).
+- **Execution limits** -- configurable caps on loop iterations,
+  call depth, and total command count.
+- **Write isolation** -- the in-memory filesystem means writes never
+  touch the real project.
+
+## Important: this adds a dependency
+
+speckit-security's core scripts have **zero runtime dependencies**
+beyond bash, grep, sed, git, and python3 -- all standard OS tools.
+
+Adding \`just-bash\` introduces a **Node.js / npm dependency**. This
+is an opt-in choice for teams that want sandbox isolation. The core
+scripts continue to work without it. The sandbox wrapper is a
+separate entrypoint, not a replacement for the standard scripts.
+
+\`\`\`
+# Standard (no deps):        bash scripts/bash/gate-check.sh <spec>
+# Sandboxed (requires npm):  node sandbox/run-gate-check.mjs <spec>
+\`\`\`
+
+## What works today
+
+Tested against \`just-bash@latest\` in Node.js:
+
+| Command / Feature | Status | Notes |
+|---|---|---|
+| \`grep -rIlE\` (extended regex, recursive) | Works | Core of Gate F and audit scanning |
+| \`grep -ic\`, \`grep -q\`, \`grep -qF\` | Works | Used throughout gate-check |
+| \`sed\`, \`cat\`, \`head\`, \`tail\`, \`wc\` | Works | Text processing |
+| \`find\`, \`ls\`, \`mkdir\`, \`basename\`, \`dirname\` | Works | File operations |
+| \`date -u\` | Works | Timestamps for JSONL |
+| Pipes (\`\\|\`), redirections (\`>\`, \`>>\`), \`&&\`, \`\\|\\|\` | Works | Shell plumbing |
+| Variable expansion, \`for\` loops, \`if/else\` | Works | Control flow |
+| \`echo\`, \`printf\` | Works | Output |
+| \`set -euo pipefail\` | Partial | \`set -e\` works, \`pipefail\` behavior may differ |
+
+## What does NOT work today
+
+| Command / Feature | Status | Why |
+|---|---|---|
+| \`python3\` | Not available | WASM binary requires network download (designed for Vercel Sandbox cloud API) |
+| \`git\` | Not available | Not a built-in command |
+| \`shasum\` / \`sha256sum\` | Not available | Not a built-in command |
+| \`curl\` | Requires network opt-in | Disabled by default (correct for gate scripts, but means red-team runner cannot be sandboxed) |
+| \`source\` / \`.\` (sourcing scripts) | Partial | Works for simple scripts, complex sourcing chains may need adjustment |
+
+### Impact on speckit-security scripts
+
+The scripts depend on \`python3\` for:
+
+- **YAML config parsing** (\`lib/config.sh\`)
+- **JSONL output** (\`jsonl_append\` / \`jsonl_append_chained\` in \`lib/defaults.sh\`)
+- **Path confinement** (\`require_inside_project\` uses \`os.path.realpath\`)
+- **Red-team scenario parsing** (\`red-team-run.sh\`)
+
+Without Python, the full gate-check and audit scripts cannot run
+inside \`just-bash\` unmodified. The approach below works around this
+by pre-parsing config and writing JSONL from the Node.js wrapper.
+
+## Step-by-step: sandboxed gate-check
+
+This walkthrough creates a Node.js wrapper that loads your project
+files into \`just-bash\`'s in-memory filesystem and runs a simplified
+gate-check. It handles config parsing and JSONL output in JavaScript
+instead of Python.
+
+### 1. Install just-bash
+
+\`\`\`bash
+cd your-project
+npm install just-bash
+\`\`\`
+
+### 2. Create the sandbox wrapper
+
+Create \`sandbox/run-gate-check.mjs\`:
+
+\`\`\`javascript
+#!/usr/bin/env node
+// Sandboxed gate-check runner using just-bash
+// Usage: node sandbox/run-gate-check.mjs <spec-path>
+
+const specPath = process.argv[2];
+if (!specPath) {
+  console.error("usage: node sandbox/run-gate-check.mjs <spec-path>");
+  process.exit(2);
+}
+
+// --- Load project files into the in-memory filesystem ---------------
+
+const projectRoot = process.cwd();
+const files = {};
+
+function loadDir(dir, prefix) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    const vpath = prefix + "/" + entry.name;
+    if (entry.isDirectory()) {
+      const skip = [
+        "node_modules", ".git", ".next", "out",
+        ".wrangler", "dist", ".source",
+      ];
+      if (skip.includes(entry.name)) continue;
+      loadDir(full, vpath);
+    } else if (entry.isFile()) {
+      try {
+        files[vpath] = readFileSync(full, "utf8");
+      } catch {
+        // skip binary files
+      }
+    }
+  }
+}
+
+loadDir(projectRoot, "");
+console.log(\`Loaded \${Object.keys(files).length} files into sandbox\`);
+
+// --- Pre-parse config (replaces python3 config.sh) ------------------
+
+const configPath = ".specify/extensions/tekimax-security/tekimax-security-config.yml";
+let userSecretPatterns = [];
+let userInlinePatterns = [];
+let userGatewayAllowlist = [];
+
+if (files["/" + configPath]) {
+  // Minimal YAML list parser for the specific keys we need
+  const content = files["/" + configPath];
+  const parseList = (key) => {
+    const re = new RegExp(
+      \`\${key}:\\\\s*\\\\n((?:\\\\s+-\\\\s+.+\\\\n?)*)\`,
+    );
+    const m = content.match(re);
+    if (!m) return [];
+    return m[1]
+      .split("\\n")
+      .map((l) => l.replace(/^\\s*-\\s*/, "").replace(/["']/g, "").trim())
+      .filter(Boolean);
+  };
+  userSecretPatterns = parseList("secret_patterns");
+  userInlinePatterns = parseList("inline_prompt_patterns");
+  userGatewayAllowlist = parseList("stack_direct_sdk");
+}
+
+// --- Inject parsed config as env vars for the bash script -----------
+
+const bash = new Bash({
+  files,
+  cwd: "/",
+  env: {
+    HOME: "/",
+    SANDBOX: "true",
+    // Pass parsed config as env vars so the script doesn't need python3
+    USER_SECRET_PATTERNS: userSecretPatterns.join("|"),
+    USER_INLINE_PATTERNS: userInlinePatterns.join("|"),
+    USER_GATEWAY_ALLOWLIST: userGatewayAllowlist.join(":"),
+  },
+  executionLimits: {
+    maxCallDepth: 50,
+    maxCommandCount: 10000,
+    maxLoopIterations: 10000,
+  },
+});
+
+// --- Run a simplified gate-check in the sandbox ---------------------
+
+const specVpath = "/" + relative(projectRoot, resolve(specPath));
+
+// Gate F: inline prompt scan (the most valuable sandbox check)
+const inlinePromptRe =
+  '([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|assistant|chatbot|expert)|<\\\\|system\\\\|>|<\\\\|im_start\\\\|>system)';
+
+const gateF = await bash.exec(
+  \`if [ -d /src ]; then
+    hits=$(grep -rIliE '\${inlinePromptRe}' --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" /src 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+      echo "FAIL: inline prompts found"
+      echo "$hits"
+      exit 1
+    fi
+  fi
+  echo "PASS"\`,
+);
+
+// Gate A: data contract section
+const gateA = await bash.exec(
+  \`grep -qF "## 2. Data Contract" \${specVpath} 2>/dev/null || grep -qF "## Data Contract" \${specVpath} 2>/dev/null; echo $?\`,
+);
+
+// Gate B: threat model with content
+const gateB = await bash.exec(
+  \`if grep -qF "## Security / Threat Model" \${specVpath} 2>/dev/null || grep -qF "## Security" \${specVpath} 2>/dev/null; then
+    if grep -qE '^\\\\|[[:space:]]*T[0-9]' \${specVpath} 2>/dev/null || grep -qE '^\\\\|[[:space:]]*(Spoofing|Tampering)' \${specVpath} 2>/dev/null; then
+      echo "PASS"
+    else
+      echo "FAIL: STRIDE table has no threat rows"
+    fi
+  else
+    echo "FAIL: missing threat model"
+  fi\`,
+);
+
+// --- Report ---------------------------------------------------------
+
+console.log("\\n--- Sandboxed Gate Check ---");
+console.log(\`Spec: \${specPath}\`);
+console.log(\`Gate A (Data Contract): \${gateA.stdout.trim() === "0" ? "PASS" : "FAIL"}\`);
+console.log(\`Gate B (Threat Model):  \${gateB.stdout.trim()}\`);
+console.log(\`Gate F (Inline Scan):   \${gateF.stdout.trim().split("\\n")[0]}\`);
+
+if (gateF.stdout.includes("FAIL")) {
+  console.log("\\nInline prompt findings:");
+  console.log(
+    gateF.stdout
+      .split("\\n")
+      .slice(1)
+      .map((l) => "  " + l)
+      .join("\\n"),
+  );
+}
+
+// --- Write JSONL to real filesystem (outside sandbox) ---------------
+
+const logDir = join(projectRoot, ".tekimax-security");
+mkdirSync(logDir, { recursive: true });
+const logPath = join(logDir, "gate-log.jsonl");
+
+// Read previous hash for chain
+let prevHash = "genesis";
+if (existsSync(logPath)) {
+  const lines = readFileSync(logPath, "utf8").trim().split("\\n");
+  if (lines.length > 0 && lines[lines.length - 1]) {
+    prevHash =
+      "sha256:" +
+      createHash("sha256")
+        .update(lines[lines.length - 1])
+        .digest("hex");
+  }
+}
+
+const verdict =
+  gateA.stdout.trim() === "0" &&
+  gateB.stdout.trim() === "PASS" &&
+  gateF.stdout.trim() === "PASS"
+    ? "PASS"
+    : "BLOCK";
+
+const entry = JSON.stringify({
+  spec: specPath,
+  phase: "before_implement",
+  verdict,
+  ts: new Date().toISOString(),
+  user: "sandbox",
+  sandbox: "just-bash",
+  gates: {
+    A: gateA.stdout.trim() === "0" ? "pass" : "fail",
+    B: gateB.stdout.trim().startsWith("PASS") ? "pass" : "fail",
+    F: gateF.stdout.trim() === "PASS" ? "pass" : "fail",
+  },
+  prev_hash: prevHash,
+});
+
+appendFileSync(logPath, entry + "\\n");
+
+console.log(\`\\nVERDICT: \${verdict}\`);
+console.log(\`Gate log: \${logPath}\`);
+
+process.exit(verdict === "PASS" ? 0 : 1);
+\`\`\`
+
+### 3. Run it
+
+\`\`\`bash
+node sandbox/run-gate-check.mjs .specify/specs/F-001-my-feature.md
+\`\`\`
+
+Example output:
+
+\`\`\`
+Loaded 132 files into sandbox
+
+--- Sandboxed Gate Check ---
+Spec: .specify/specs/F-001-my-feature.md
+Gate A (Data Contract): PASS
+Gate B (Threat Model):  PASS
+Gate F (Inline Scan):   PASS
+
+VERDICT: PASS
+Gate log: .tekimax-security/gate-log.jsonl
+\`\`\`
+
+### 4. Verify isolation
+
+The sandbox prevents access to anything outside the loaded files:
+
+\`\`\`javascript
+// This returns exit 1 — /etc doesn't exist in the sandbox
+const r = await bash.exec("cat /etc/passwd");
+// r.exitCode === 1
+// r.stderr === "cat: /etc/passwd: No such file or directory"
+
+// Network is disabled — curl fails
+const r2 = await bash.exec("curl https://example.com");
+// r2.exitCode === 1
+\`\`\`
+
+## Limitations and caveats
+
+### Gates C, D, E are not covered
+
+The wrapper above demonstrates Gates A, B, and F. Gates C (Model
+Governance), D (Guardrails), and E (Red Team) require more
+complex file parsing. You can extend the wrapper to add them --
+the pattern is the same: run grep/sed commands inside the sandbox
+and parse the results in JavaScript.
+
+### No Python in the sandbox
+
+The \`python3\` runtime in \`just-bash\` downloads a CPython WASM
+binary over the network. It's designed for the
+[Vercel Sandbox API](https://sdk.vercel.ai/docs/ai-sdk-core/sandbox)
+cloud environment, not local Node.js. This means:
+
+- \`lib/config.sh\` (YAML parser) does not work inside the sandbox
+- \`jsonl_append\` / \`jsonl_append_chained\` do not work inside the sandbox
+- \`require_inside_project\` does not work inside the sandbox
+  (but isn't needed -- the in-memory filesystem is the confinement)
+
+The wrapper works around this by doing config parsing and JSONL
+output in JavaScript instead.
+
+### No git
+
+\`git\` is not a built-in command. Checks that use
+\`git ls-files\` (e.g. \`.env committed\` detection) or
+\`git config user.name\` need to be handled by the Node.js wrapper.
+
+### Red-team runner cannot be sandboxed
+
+\`red-team-run.sh\` makes HTTP requests to a staging endpoint by
+design. Sandboxing it with network disabled would defeat its
+purpose. Continue running it directly on the host with the
+built-in \`never_run_against\` safety guards.
+
+### Not a full POSIX shell
+
+\`just-bash\` implements ~80 commands, not the full POSIX spec. Some
+edge cases in complex \`grep\` flag combinations, \`sed\` expressions,
+or shell syntax may behave differently. Always test your specific
+scripts.
+
+## Future directions
+
+- **Python support** -- if \`just-bash\` adds offline CPython WASM
+  loading, the full gate scripts could run unmodified.
+- **Vercel Sandbox API** -- for CI or cloud use cases, the Vercel
+  Sandbox API provides the same \`just-bash\` interface with full
+  Python support. This would allow running the unmodified scripts
+  in a cloud sandbox.
+- **Full gate coverage** -- extend the wrapper to cover all six
+  gates with JavaScript equivalents of the Python helpers.
+- **Pre-built sandbox image** -- package a ready-to-use sandbox
+  wrapper as an npm package that users can install alongside
+  speckit-security.
+
+## Further reading
+
+- [just-bash README](https://github.com/vercel-labs/just-bash)
+- [Vercel Sandbox API docs](https://sdk.vercel.ai/docs/ai-sdk-core/sandbox)
+- [speckit-security Security Model](/docs/security) -- the built-in
+  confinement and JSONL safety measures that work without any sandbox
+
+---
+
+=== DOCS PAGE: Security Model ===
+URL: /docs/security
+Description: How speckit-security protects itself, confines scripts to the project directory, and enforces guardrails at every layer.
+## Security architecture
+
+\`speckit-security\` operates at two levels:
+
+1. **Feature security** -- the six gates that enforce threat models, data contracts, guardrails, and red teaming on the features *you* build.
+2. **Self security** -- the measures that prevent the extension's own scripts from being exploited via path traversal, injection, or tampering.
+
+This page covers both.
+
+---
+
+## Script confinement
+
+Every bash script in \`speckit-security\` is confined to the project
+directory. Scripts **cannot read, write, or execute files outside the
+project root**, enforced by the \`require_inside_project\` helper in
+\`lib/defaults.sh\`.
+
+### How it works
+
+When a script receives a file path argument (e.g. \`gate-check.sh <spec-path>\`),
+it resolves the path to its canonical absolute form using Python's
+\`os.path.realpath\` (which follows symlinks) and verifies the resolved path
+starts with \`$(pwd -P)\` (the physical project root):
+
+\`\`\`bash
+require_inside_project "$SPEC_PATH" "spec path"
+\`\`\`
+
+If the path escapes the project -- via \`../..\` traversal, absolute
+paths like \`/etc/passwd\`, or symlinks pointing outside -- the script
+exits immediately with error code 2:
+
+\`\`\`
+error: spec path escapes the project root.
+  resolved: /etc/passwd
+  project:  /home/user/my-project
+  speckit-security scripts are confined to the project directory.
+\`\`\`
+
+### What is confined
+
+| Script | Input | Confinement |
+|--------|-------|-------------|
+| \`gate-check.sh\` | \`$1\` (spec file path) | \`require_inside_project\` before any read |
+| \`install-rules.sh\` | \`--docs <path>\` argument | \`require_inside_project\` before any write |
+| \`audit.sh\` | scans \`src/\` and \`.\` | Hardcoded relative paths, exclusion list for \`node_modules\`, \`.git\`, \`dist\`, \`.next\` |
+| \`red-team-run.sh\` | staging URL from config | Regex + \`never_run_against\` config list blocks production URLs |
+| \`config.sh\` | config YAML path | Hardcoded by callers to \`.specify/extensions/.../config.yml\` |
+
+### Log files
+
+All log files (gate-log, audit-log, red-team traces) are written to
+\`.tekimax-security/\` using hardcoded relative paths that cannot be
+overridden by user input.
+
+---
+
+## JSONL injection prevention
+
+Gate verdicts and audit results are written as JSONL (one JSON object
+per line). All JSONL output is produced by \`jsonl_append\` in
+\`lib/defaults.sh\`, which passes every value through Python's
+\`json.dumps\` -- shell metacharacters in git usernames, spec titles, or
+red-team scenario text cannot break the JSON structure or inject
+shell commands.
+
+\`\`\`bash
+# Safe -- values are escaped by Python, not interpolated in bash
+jsonl_append "$GATE_LOG" \\
+  "user"    "$USER" \\
+  "verdict" "$VERDICT"
+\`\`\`
+
+---
+
+## Tamper-evident hash chain
+
+Every gate-log entry includes a \`prev_hash\` field containing the
+SHA-256 of the previous line (or \`"genesis"\` for the first entry).
+This creates a lightweight hash chain: if any past entry is modified,
+the chain breaks and the tampering is detectable by recomputing hashes.
+
+\`\`\`jsonl
+{"spec": "F-001", "verdict": "PASS", ..., "prev_hash": "genesis"}
+{"spec": "F-002", "verdict": "PASS", ..., "prev_hash": "sha256:a1b2c3..."}
+\`\`\`
+
+The hash chain provides tamper **detection**. For tamper **proof**
+(cryptographic signatures with cosign/ed25519), a signing layer
+can be added on top -- see the [TEKIMAX website](https://tekimax.com)
+for commercial add-ons.
+
+---
+
+## Guardrail architecture
+
+The guardrail system operates at three layers:
+
+### Layer 1: Spec-time guardrails (Gate D)
+
+The \`/speckit.tekimax-security.guardrails\` command generates two files
+per feature:
+
+- \`prompts/guardrails/<slug>.yml\` -- machine-readable config with:
+  - \`input.blocked_patterns\` -- strings that reject the request
+  - \`output.redact_patterns\` -- regex patterns replaced in model output
+  - \`limits.rate_per_user_per_minute\` -- numeric rate limit
+  - \`limits.cost_ceiling_usd_per_day\` -- numeric cost ceiling
+- \`prompts/system/<slug>.md\` -- versioned system prompt with frontmatter
+
+Gate D in \`gate-check.sh\` verifies all five keys exist and that rate
+limit and cost ceiling are numeric (not placeholder text).
+
+### Layer 2: Implementation-time audit (Gate F)
+
+\`audit.sh\` scans the codebase for:
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Inline prompts in \`src/\` | CRITICAL | System prompts hardcoded in source instead of the versioned \`.md\` file |
+| Committed secrets | CRITICAL | API keys, private keys, tokens matching known patterns |
+| \`.env\` in git | CRITICAL | Environment files tracked by git |
+| Direct SDK imports | WARN | Model SDK imports outside the gateway allowlist |
+| Guardrail freshness | WARN | Guardrail YAML or system prompt edited without a version bump |
+| Guardrail completeness | WARN | Missing \`blocked_patterns\`, \`redact_patterns\`, rate limits, or cost ceilings |
+
+### Layer 3: Runtime guardrails
+
+The guardrail YAML is consumed by your AI gateway middleware at
+runtime. \`speckit-security\` enforces the *existence and completeness*
+of guardrails -- it does not run a gateway itself. The runtime
+enforcement depends on your stack:
+
+- **Input validation** -- the gateway loads \`blocked_patterns\` and
+  rejects matching messages before they reach the model
+- **Output redaction** -- the gateway loads \`redact_patterns\` and
+  replaces PII/sensitive patterns in model responses
+- **Rate limiting** -- the gateway enforces \`rate_per_user_per_minute\`
+- **Cost ceiling** -- the gateway enforces \`cost_ceiling_usd_per_day\`
+
+For a ready-made gateway client that loads your guardrail YAML at
+startup, see the [TEKIMAX website](https://tekimax.com) for
+commercial add-ons.
+
+---
+
+## Secret detection
+
+Both \`gate-check.sh\` (Gate F) and \`audit.sh\` scan for committed
+secrets using a shared set of patterns defined in \`lib/defaults.sh\`:
+
+| Pattern | What it matches |
+|---------|----------------|
+| \`sk_live_...\` / \`sk_test_...\` | Stripe API keys |
+| \`-----BEGIN ... PRIVATE KEY-----\` | RSA, EC, DSA, OPENSSH, encrypted private keys |
+| \`xoxb-...\` | Slack bot tokens |
+| \`ghp_...\` / \`gho_...\` / \`ghs_...\` | GitHub personal, OAuth, and server tokens |
+| \`AKIA...\` | AWS access key IDs |
+| \`AIza...\` | Google API keys |
+
+You can extend these with project-specific patterns in
+\`tekimax-security-config.yml\`:
+
+\`\`\`yaml
+audit:
+  secret_patterns:
+    - "my_custom_live_[a-zA-Z0-9]{32,}"
+\`\`\`
+
+User patterns are **additive** -- they extend the built-in defaults,
+never replace them.
+
+**Important:** the scripts never print the actual secret value. Only
+the file path is reported so the audit log itself doesn't become a
+leak vector.
+
+---
+
+## Red-team safety
+
+The automated red-team runner (\`red-team-run.sh\`) has multiple safety
+layers to prevent accidental use against production:
+
+1. **Hardcoded prod check** -- refuses any URL containing \`prod\` or
+   \`production\` (word-boundary regex)
+2. **Config blocklist** -- reads \`red_team.never_run_against\` from
+   your config and blocks any URL matching those entries
+3. **Rate limiting** -- capped at \`red_team.max_rps\` (default 10
+   requests/second)
+4. **Red-team header** -- every request includes
+   \`X-Red-Team: tekimax-security\` so staging logs can identify test traffic
+5. **Staging URL required** -- the runner refuses to start without an
+   explicit staging URL in config or environment
+
+---
+
+## Chat Worker security
+
+The docs chat at [speckit.tekimax.com/chat](https://speckit.tekimax.com/chat)
+runs on Cloudflare Workers with these defenses:
+
+| Defense | Implementation |
+|---------|---------------|
+| CORS origin allowlist | Only \`ALLOWED_ORIGIN\` (production domain); localhost requires explicit \`ALLOW_LOCAL_ORIGINS=true\` |
+| Input validation | Max 20 messages, 4000 chars per message, 20000 chars total |
+| Rate limiting | Cloudflare native binding: 20 req / 60s per client IP |
+| Response size cap | 64 KiB TransformStream backstop |
+| No API keys in code | Workers AI binding (Cloudflare authenticates internally) |
+| Grounded answers | System prompt instructs model to answer only from the docs corpus |
+
+---
+
+## What speckit-security is NOT
+
+This extension is **one layer** of a broader security program:
+
+- It is **not** a SAST tool -- it catches spec-level and commit-level issues,
+  not runtime vulnerabilities in your application code
+- It is **not** a dependency scanner -- use \`npm audit\`, Snyk, or
+  Dependabot alongside it
+- It is **not** a WAF or runtime monitor -- it enforces that guardrails
+  *exist*, not that they *work* at runtime
+- It is **not** a penetration testing replacement -- the red-team runner
+  tests AI-specific attack surfaces (prompt injection, jailbreak,
+  extraction), not network or infrastructure vulnerabilities
+
+Use it alongside your existing security tooling. It plugs the gap
+between "we wrote a spec" and "we verified the spec's security
+controls exist before writing code."
 
 ## ARTICLES
 
@@ -1388,4 +2087,4 @@ The full story of how we found the bugs is in the blog post
 the short version is: we audited our own documentation site and the
 audit flagged itself.`;
 
-export const DOCS_CONTEXT_BYTES = 55539;
+export const DOCS_CONTEXT_BYTES = 80824;
