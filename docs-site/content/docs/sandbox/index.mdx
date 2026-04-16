@@ -1,0 +1,59 @@
+---
+title: Sandbox (Experimental)
+description: Run speckit-security gate scripts inside a sandboxed environment for defense-in-depth isolation.
+---
+
+> **Experimental.** Everything on this page is exploratory. APIs,
+> integration patterns, and supported runtimes may change without
+> notice. Do not depend on sandbox support in production CI pipelines
+> until it graduates from experimental status.
+
+## Why sandbox?
+
+By default, speckit-security scripts run directly on the host shell.
+They have [project-root confinement](/docs/security) via
+`require_inside_project`, but that's a **check**, not a **boundary**
+-- a bug in the scripts or a crafted input could still access the
+host filesystem or network.
+
+A sandbox adds a real isolation boundary:
+
+| Layer | What it prevents |
+|-------|------------------|
+| **Filesystem isolation** | Scripts can only see files you explicitly mount -- no `/etc`, no `~/.ssh`, no sibling repos |
+| **Network disabled** | Gate scripts have no reason to make network calls -- sandbox enforces it at the runtime level |
+| **Execution limits** | Malicious spec files cannot trigger infinite loops or fork bombs |
+| **Write isolation** | Scripts read your real project files but writes go to an in-memory layer -- the real project is never modified |
+
+## When to use a sandbox
+
+- **Untrusted specs.** Running gate-check against a spec file from an
+  external contributor or a pull request you haven't reviewed yet.
+- **CI on shared runners.** If your CI runner processes multiple repos,
+  sandboxing prevents cross-repo information leakage.
+- **Web-based gate runners.** If you build a UI that lets users run
+  gate-check from a browser, the sandbox is essential.
+- **Defense in depth.** Even if you trust the input, sandboxing limits
+  the blast radius of any bug in the scripts themselves.
+
+## When you don't need it
+
+- **Local development.** If you're the only person running the scripts
+  on your own machine against your own specs, the built-in
+  `require_inside_project` confinement is sufficient.
+- **Trusted CI.** If your CI only processes your own repo and the
+  runner is ephemeral (e.g. GitHub Actions), host isolation is already
+  provided by the runner VM.
+
+## Available sandbox runtimes
+
+<Cards>
+  <Card
+    title="just-bash"
+    href="/docs/sandbox/just-bash"
+    description="Virtual bash environment by Vercel Labs. In-memory filesystem, network disabled by default, execution limits. TypeScript/Node.js."
+  />
+</Cards>
+
+More runtimes may be added as the ecosystem matures. Contributions
+welcome -- see [CONTRIBUTING.md](https://github.com/TEKIMAX/speckit-security/blob/main/CONTRIBUTING.md).
