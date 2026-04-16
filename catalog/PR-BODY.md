@@ -1,38 +1,60 @@
-# Update `tekimax-security` to v0.3.0 in community catalog
+# Update `tekimax-security` to v0.3.1 in community catalog
 
-Updates the TEKIMAX Secure SDD extension catalog entry from v0.2.0 to
-v0.3.0 with security hardening, new gates, and a docs site.
+Updates the TEKIMAX Secure SDD extension catalog entry to v0.3.1 with
+a new dependency CVE gate, polyglot scan coverage, and an anchored
+gateway allowlist.
 
-## What changed since v0.2.0
+## What changed since v0.3.0
 
-### Security hardening (v0.3.0)
+### Added in v0.3.1
 
-- **Project-root confinement** — all scripts validate file paths stay
-  inside the project directory (prevents path traversal and symlink attacks)
-- **JSONL injection prevention** — all log output uses Python `json.dumps`
-  (shell metacharacters in values cannot break JSON structure)
-- **Tamper-evident hash chain** — every gate-log entry includes the SHA-256
-  of the previous line for lightweight tamper detection
-- **Guardrail completeness audit** — warns on missing rate limits or
-  cost ceilings in guardrail YAML files
-- **Gate B** now verifies STRIDE table has actual content rows
-- **Gate D** now verifies rate limit and cost ceiling are numeric
-- ShellCheck enforcing in CI
+- **Gate G — Dependency CVEs.** New `dep-audit.sh` and
+  `speckit.tekimax-security.dep-audit` command. Resolution chain:
+  `osv-scanner` (polyglot, preferred) → `pnpm audit` → `npm audit`
+  → `yarn npm audit`. Threshold via `dep_audit.fail_on`
+  (`low`|`moderate`|`high`|`critical`, default `high`). Runs
+  automatically as part of `gate-check` and logs to
+  `.tekimax-security/dep-audit-log.jsonl`.
+- **Polyglot file coverage for Gate F and the audit.** TS/JS/Py
+  plus Go, Rust, Ruby, Java, Kotlin, Swift, PHP, shell, YAML,
+  JSON, TOML, Terraform, Markdown. Secrets and inline prompts
+  commonly land in CI YAML and Terraform, not only application
+  code.
+- **`audit.include_globs`, `audit.exclude_paths`,
+  `audit.direct_sdk_patterns`** config keys. Built-in direct-SDK
+  list expanded to include `cohere-ai`, `@mistralai/mistralai`,
+  `@aws-sdk/client-bedrock-runtime`, `replicate`, `together-ai`.
+- **`--staged-only` and `--json` flags** on `audit.sh`,
+  `gate-check.sh`, and `dep-audit.sh`. Pre-commit-hook friendly;
+  CI-friendly.
+- **Recursive `.env` detection.** `apps/*/.env`,
+  `packages/*/.env.local`, and similar nested env files are now
+  flagged. `.env.example`, `.env.sample`, and `.env.template`
+  remain allowed.
 
-### Features added since v0.2.0
+### Changed in v0.3.1 (breaking)
 
-- **8 commands** (was 7): added `install-rules` for project-wide
-  development discipline
-- **Docs site** at [speckit.tekimax.com](https://speckit.tekimax.com)
-  with full docs, Security Model page, and AI chat
-- **Ask AI** grounded docs chat at
-  [speckit.tekimax.com/chat](https://speckit.tekimax.com/chat)
-- **Config read-back** — user config extends built-in defaults for
-  secret patterns, inline-prompt patterns, and gateway allowlist
-- **15 automated tests** covering gate-check, audit, config parser,
-  and install-rules (zero external deps, POSIX bash only)
+- **Gateway allowlist uses anchored matching.** An entry
+  `src/ai/gateway` matches the exact path, any subdirectory, or a
+  file-extension append. It no longer silently matches
+  `src/ai/gateway-bypass.ts`. Projects that relied on the
+  substring match must list the full file path or the containing
+  directory.
 
-## The eight commands
+### Carried forward from v0.3.0
+
+- Project-root confinement on all file-path arguments
+  (`require_inside_project`) — prevents path traversal and
+  symlink attacks.
+- JSONL injection prevention (`jsonl_append`,
+  `jsonl_append_chained`) — values serialized via Python
+  `json.dumps`, shell metacharacters cannot break output.
+- Tamper-evident hash chain on every gate-log entry
+  (SHA-256 of previous line, no crypto signing dependencies).
+- Gate B verifies STRIDE table has content rows, not just a
+  heading. Gate D verifies numeric rate limit and cost ceiling.
+
+## The nine commands
 
 | Command | Hook | Catches |
 |---|---|---|
@@ -40,18 +62,19 @@ v0.3.0 with security hardening, new gates, and a docs site.
 | `threat-model` | `after_plan` | Design-time security flaws via STRIDE |
 | `model-governance` | manual | Model debt — unpinned versions, no rollback, no eval baselines |
 | `guardrails` | manual | Prompt debt — no input validation, no output redaction |
-| `gate-check` | `before_implement` | Blocks until all six security gates pass |
-| `audit` | `after_implement` | Inline prompts, committed secrets, SDK imports, guardrail drift |
+| `gate-check` | `before_implement` | Blocks until all seven security gates pass |
+| `audit` | `after_implement` | Inline prompts, committed secrets, SDK imports, guardrail drift (polyglot) |
+| `dep-audit` | part of `gate-check` | Dependency CVEs (Gate G) via osv-scanner / pnpm / npm / yarn |
 | `red-team` | `before_analyze` | Adversarial testing — prompt injection, jailbreak, extraction |
 | `install-rules` | manual | Development discipline — commit hygiene, DRY, naming, tests |
 
 ## Verification
 
-- [x] `extension.yml` validates (v0.3.0)
+- [x] `extension.yml` validates (v0.3.1)
 - [x] Installs cleanly via `specify extension add --dev`
-- [x] All 8 commands register correctly
-- [x] 15/15 tests pass on macOS and Ubuntu
-- [x] ShellCheck passes on all scripts
+- [x] All 9 commands register correctly
+- [x] 18/18 tests pass on macOS and Ubuntu
+- [x] ShellCheck passes on all scripts (CI-enforcing)
 - [x] `.extensionignore` excludes dev-only files
 - [x] Apache 2.0 license included
 - [x] Zero open Dependabot vulnerabilities
@@ -61,7 +84,7 @@ v0.3.0 with security hardening, new gates, and a docs site.
 - Repo: https://github.com/TEKIMAX/speckit-security
 - Docs: https://speckit.tekimax.com
 - Changelog: https://github.com/TEKIMAX/speckit-security/blob/main/CHANGELOG.md
-- Release: https://github.com/TEKIMAX/speckit-security/releases/tag/v0.3.0
+- Release: https://github.com/TEKIMAX/speckit-security/releases/tag/v0.3.1
 
 ## Compatibility
 
