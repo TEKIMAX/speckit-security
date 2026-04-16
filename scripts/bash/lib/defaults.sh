@@ -84,10 +84,15 @@ DEFAULT_GATEWAY_ALLOWLIST=(
 # Joins the named array into a single ERE alternation string, printed
 # to stdout. Usage:
 #   SECRET_RE=$(join_secret_re SECRET_PATTERNS)
+#
+# Uses eval instead of nameref (local -n) for bash 3.2 compatibility
+# (macOS default). The array name is trusted — always a hardcoded
+# constant from our own scripts, never user input.
 join_secret_re() {
-  local -n _arr=$1
+  local _arrname=$1
   local result=""
-  for p in "${_arr[@]}"; do
+  eval "local _items=(\"\${${_arrname}[@]}\")"
+  for p in "${_items[@]}"; do
     if [ -z "$result" ]; then
       result="$p"
     else
@@ -97,13 +102,15 @@ join_secret_re() {
   printf '%s' "$result"
 }
 
-# is_gateway_allowed <path> <allowlist-array-name>
+# _is_gateway_allowed <path> <allowlist-array-name>
 #
 # Returns 0 if the file path matches any entry in the named allowlist.
+# Uses eval for bash 3.2 compatibility (see join_secret_re above).
 _is_gateway_allowed() {
   local path="$1"
-  local -n _allow=$2
-  for entry in "${_allow[@]}"; do
+  local _arrname=$2
+  eval "local _items=(\"\${${_arrname}[@]}\")"
+  for entry in "${_items[@]}"; do
     if [[ "$path" == *"$entry"* ]]; then
       return 0
     fi
