@@ -18,6 +18,12 @@
 
 set -euo pipefail
 
+# Source the shared library for require_inside_project.
+# install-rules.sh is in scripts/bash/, lib is scripts/bash/lib/.
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/defaults.sh
+source "$_SCRIPT_DIR/lib/defaults.sh"
+
 # --- arg parsing -----------------------------------------------------
 
 docs_path="docs/DEVELOPMENT-RULES.md"
@@ -39,6 +45,11 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# --- path confinement -----------------------------------------------
+# Validate that --docs path stays inside the project root. Without
+# this, `--docs /etc/crontab` would write outside the project.
+require_inside_project "$docs_path" "--docs path"
 
 # --- locate the extension install dir -------------------------------
 #

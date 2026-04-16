@@ -5,7 +5,10 @@
 .gitignore
 .github/
 
-# Dev-only
+# Dev-only — tests are excluded from `specify extension add` installs.
+# To run the test suite against a source checkout:
+#   git clone https://github.com/TEKIMAX/speckit-security.git
+#   cd speckit-security && bash tests/run.sh
 tests/
 CONTRIBUTING.md
 docs/draft/

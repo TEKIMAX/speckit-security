@@ -16,6 +16,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/config.sh
 source "$SCRIPT_DIR/lib/config.sh"
+# shellcheck source=lib/defaults.sh
+source "$SCRIPT_DIR/lib/defaults.sh"
 
 RT_PATH="${1:-}"
 if [ -z "$RT_PATH" ] || [ ! -f "$RT_PATH" ]; then
@@ -46,11 +48,22 @@ if [ -z "$STAGING_URL" ]; then
   exit 2
 fi
 
-# Safety — never run against prod
+# Safety — never run against prod (hardcoded check)
 if echo "$STAGING_URL" | grep -qiE "(^|[^a-z])prod([^a-z]|$)|production"; then
   echo "error: refusing to run red-team against a production URL: $STAGING_URL" >&2
   exit 2
 fi
+
+# Safety — also check the never_run_against list from config
+while IFS= read -r blocked; do
+  [ -z "$blocked" ] && continue
+  if echo "$STAGING_URL" | grep -qiF "$blocked"; then
+    echo "error: refusing to run red-team — URL matches never_run_against entry: $blocked" >&2
+    echo "  URL: $STAGING_URL" >&2
+    echo "  Edit $CONFIG → red_team.never_run_against to adjust." >&2
+    exit 2
+  fi
+done < <(config_list "$CONFIG" "red_team.never_run_against")
 
 # Resolve max RPS — env wins, then config, then fall back to 10
 MAX_RPS="${SPECKIT_TEKIMAX_SECURITY_MAX_RPS:-}"
@@ -179,22 +192,19 @@ while IFS=$'\t' read -r TITLE TECHNIQUE INPUT EXPECTED SEVERITY; do
   esac
   printf "  %s %-50s %s (%s)\n" "$icon" "${TITLE:0:50}" "$RESULT" "$HTTP_CODE"
 
-  # Append JSONL trace
-  python3 - >> "$TRACE" <<PY
-import json
-print(json.dumps({
-    "rt": "$RT_ID",
-    "ts": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "scenario": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$TITLE"),
-    "technique": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$TECHNIQUE"),
-    "expected": "$EXPECTED",
-    "actual": "$RESULT",
-    "severity": "$SEVERITY",
-    "http_code": "$HTTP_CODE",
-    "target": "$STAGING_URL",
-    "user": $(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$GIT_USER"),
-}))
-PY
+  # Append JSONL trace — uses jsonl_append from lib/defaults.sh
+  # to safely escape all values (no shell interpolation in Python).
+  jsonl_append "$TRACE" \
+    "rt"        "$RT_ID" \
+    "ts"        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "scenario"  "$TITLE" \
+    "technique" "$TECHNIQUE" \
+    "expected"  "$EXPECTED" \
+    "actual"    "$RESULT" \
+    "severity"  "$SEVERITY" \
+    "http_code" "$HTTP_CODE" \
+    "target"    "$STAGING_URL" \
+    "user"      "$GIT_USER"
 
   # Rate limit
   sleep "$(echo "scale=3; $DELAY_MS / 1000" | bc 2>/dev/null || echo 0.1)"

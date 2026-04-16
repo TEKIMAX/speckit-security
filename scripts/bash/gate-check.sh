@@ -11,12 +11,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/config.sh
 source "$SCRIPT_DIR/lib/config.sh"
+# shellcheck source=lib/defaults.sh
+source "$SCRIPT_DIR/lib/defaults.sh"
 
 SPEC_PATH="${1:-}"
 if [ -z "$SPEC_PATH" ] || [ ! -f "$SPEC_PATH" ]; then
   echo "error: spec path missing or not a file: $SPEC_PATH" >&2
   exit 2
 fi
+# Confine spec reads to the project directory — prevents path
+# traversal via "../..", symlinks, or absolute paths.
+require_inside_project "$SPEC_PATH" "spec path"
 
 EXT_DIR=".specify/extensions/tekimax-security"
 CONFIG="$EXT_DIR/tekimax-security-config.yml"
@@ -26,25 +31,10 @@ mkdir -p "$LOG_DIR"
 
 # --- Config-driven pattern sets (Gate F) ----------------------------
 #
+# Built-in defaults live in lib/defaults.sh (single source of truth).
 # Gate F's inline-prompt and secret checks read their patterns from
 # the project config with built-in fallbacks. See docs/customization
-# for the config schema. Missing or empty config keys fall back to
-# the built-ins.
-
-DEFAULT_INLINE_PROMPT_RE='([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])'
-
-DEFAULT_SECRET_PATTERNS=(
-  'sk_live_[0-9a-zA-Z]{24,}'
-  'sk_test_[0-9a-zA-Z]{24,}'
-  '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
-  'ghp_[0-9a-zA-Z]{36}'
-  'AKIA[0-9A-Z]{16}'
-  'AIza[0-9A-Za-z_\-]{35}'
-)
-
-DEFAULT_GATEWAY_ALLOWLIST=(
-  'src/ai/gateway'
-)
+# for the config schema.
 
 USER_INLINE_PROMPT_PATTERNS=()
 while IFS= read -r item; do
@@ -67,24 +57,11 @@ for p in "${USER_INLINE_PROMPT_PATTERNS[@]}"; do
 done
 
 SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" "${USER_SECRET_PATTERNS[@]}")
-SECRET_RE=""
-for p in "${SECRET_PATTERNS[@]}"; do
-  if [ -z "$SECRET_RE" ]; then
-    SECRET_RE="$p"
-  else
-    SECRET_RE="${SECRET_RE}|${p}"
-  fi
-done
+SECRET_RE=$(join_secret_re SECRET_PATTERNS)
 
 GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" "${USER_GATEWAY_ALLOWLIST[@]}")
 is_gateway_allowed() {
-  local path="$1"
-  for allow in "${GATEWAY_ALLOWLIST[@]}"; do
-    if [[ "$path" == *"$allow"* ]]; then
-      return 0
-    fi
-  done
-  return 1
+  _is_gateway_allowed "$1" GATEWAY_ALLOWLIST
 }
 
 SPEC_ID=$(basename "$SPEC_PATH" .md | grep -oE '^(F|SEC|ADR|INT)-[0-9]+' || echo "UNKNOWN")
@@ -131,9 +108,15 @@ else
 fi
 
 # Gate B — Threat Model
-if check_section "## Security / Threat Model" || check_section "## Security" && grep -qi "STRIDE\|Spoofing" "$SPEC_PATH"; then
+# Verify the STRIDE table has actual content rows, not just a heading
+# with an empty table.
+if check_section "## Security / Threat Model" || { check_section "## Security" && grep -qi "STRIDE\|Spoofing" "$SPEC_PATH"; }; then
   if grep -q '\[UNMITIGATED\].*\(High\|Critical\)' "$SPEC_PATH"; then
     G_B="fail: High/Critical unmitigated threats"
+    FAIL=1
+  elif ! grep -qE '^\|[[:space:]]*T[0-9]' "$SPEC_PATH" && \
+       ! grep -qE '^\|[[:space:]]*(Spoofing|Tampering|Repudiation|Info|Denial|Elevation)' "$SPEC_PATH"; then
+    G_B="fail: STRIDE table has no threat rows"
     FAIL=1
   else
     G_B="pass"
@@ -160,14 +143,23 @@ else
 fi
 
 # Gate D — Guardrails (AI features only)
+# Verify rate limit and cost ceiling are present and numeric, not
+# just that patterns exist.
 if [ "$G_C" != "skip: no AI integration" ]; then
-  if [ -f "prompts/guardrails/${SPEC_SLUG}.yml" ] && [ -f "prompts/system/${SPEC_SLUG}.md" ]; then
-    if grep -q "blocked_patterns:" "prompts/guardrails/${SPEC_SLUG}.yml" && \
-       grep -q "redact_patterns:" "prompts/guardrails/${SPEC_SLUG}.yml"; then
-      G_D="pass"
-    else
+  GUARDRAIL_FILE="prompts/guardrails/${SPEC_SLUG}.yml"
+  if [ -f "$GUARDRAIL_FILE" ] && [ -f "prompts/system/${SPEC_SLUG}.md" ]; then
+    if ! grep -q "blocked_patterns:" "$GUARDRAIL_FILE" || \
+       ! grep -q "redact_patterns:" "$GUARDRAIL_FILE"; then
       G_D="fail: guardrail missing blocked/redact patterns"
       FAIL=1
+    elif ! grep -qE "rate_per_user_per_minute:[[:space:]]*[0-9]" "$GUARDRAIL_FILE"; then
+      G_D="fail: rate_per_user_per_minute missing or not numeric"
+      FAIL=1
+    elif ! grep -qE "cost_ceiling_usd_per_day:[[:space:]]*[0-9]" "$GUARDRAIL_FILE"; then
+      G_D="fail: cost_ceiling_usd_per_day missing or not numeric"
+      FAIL=1
+    else
+      G_D="pass"
     fi
   else
     G_D="fail: missing prompt or guardrail files"
@@ -259,14 +251,24 @@ fi
 echo
 echo "VERDICT: $VERDICT"
 
-# Append to gate log (JSONL)
+# Append to gate log (JSONL) — uses jsonl_append_chained from
+# lib/defaults.sh for tamper-evident hash chain (each line includes
+# the SHA-256 of the previous line).
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER=$(git config user.name 2>/dev/null || echo "unknown")
 PHASE="${SPECKIT_PHASE:-before_implement}"
-printf '{"spec":"%s","phase":"%s","verdict":"%s","ts":"%s","user":"%s","gates":{"A":"%s","B":"%s","C":"%s","D":"%s","E":"%s","F":"%s"}}\n' \
-  "$SPEC_ID" "$PHASE" "$VERDICT" "$TS" "$USER" \
-  "${G_A%%:*}" "${G_B%%:*}" "${G_C%%:*}" "${G_D%%:*}" "${G_E%%:*}" "${G_F%%:*}" \
-  >> "$GATE_LOG"
+jsonl_append_chained "$GATE_LOG" \
+  "spec"    "$SPEC_ID" \
+  "phase"   "$PHASE" \
+  "verdict" "$VERDICT" \
+  "ts"      "$TS" \
+  "user"    "$USER" \
+  "gates.A" "${G_A%%:*}" \
+  "gates.B" "${G_B%%:*}" \
+  "gates.C" "${G_C%%:*}" \
+  "gates.D" "${G_D%%:*}" \
+  "gates.E" "${G_E%%:*}" \
+  "gates.F" "${G_F%%:*}"
 
 if [ "$VERDICT" = "PASS" ]; then
   exit 0

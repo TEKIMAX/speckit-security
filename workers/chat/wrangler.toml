@@ -10,6 +10,9 @@ binding = "AI"
 # CORS allowlist for the docs origin. Override per environment as needed.
 [vars]
 ALLOWED_ORIGIN = "https://speckit.tekimax.com"
+# Set to "true" to allow localhost:3000-3999 origins for local dev.
+# Leave unset or empty in production.
+# ALLOW_LOCAL_ORIGINS = "true"
 
 # Native Cloudflare Workers rate limiting binding.
 # 20 requests per 60 seconds per key. Keyed on client IP in code.

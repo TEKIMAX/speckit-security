@@ -10,6 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/config.sh
 source "$SCRIPT_DIR/lib/config.sh"
+# shellcheck source=lib/defaults.sh
+source "$SCRIPT_DIR/lib/defaults.sh"
 
 EXT_DIR=".specify/extensions/tekimax-security"
 CONFIG="$EXT_DIR/tekimax-security-config.yml"
@@ -19,32 +21,9 @@ mkdir -p "$LOG_DIR"
 
 # --- Config with fallbacks ------------------------------------------
 #
-# Built-in defaults are used unless the project's config file overrides
-# them. Override any list by defining the same key in
+# Built-in defaults live in lib/defaults.sh (single source of truth).
+# Override any list by defining the same key in
 # tekimax-security-config.yml. See docs/customization for details.
-
-# Inline prompt detection — ERE regex alternation
-DEFAULT_INLINE_PROMPT_RE='([Yy]ou[[:space:]]+are[[:space:]]+(a|an)[[:space:]]+(helpful|AI|virtual|assistant|chatbot|expert|friendly|knowledgeable|precise|professional|skilled|senior|world|large[[:space:]]+language|language[[:space:]]+model|conversational|advanced|state-of-the-art)|<\|system\|>|<\|im_start\|>system|^[[:space:]]*(system|assistant|SYSTEM|ASSISTANT)[[:space:]]*:[[:space:]])'
-
-# Built-in secret patterns — wider than Gate F because this runs
-# post-implementation and we want to catch everything before ship.
-DEFAULT_SECRET_PATTERNS=(
-  'sk_live_[0-9a-zA-Z]{24,}'
-  'sk_test_[0-9a-zA-Z]{24,}'
-  '-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----'
-  'xoxb-[0-9a-zA-Z-]{20,}'
-  'ghp_[0-9a-zA-Z]{36}'
-  'gho_[0-9a-zA-Z]{36}'
-  'ghs_[0-9a-zA-Z]{36}'
-  'AKIA[0-9A-Z]{16}'
-  'AIza[0-9A-Za-z_\-]{35}'
-)
-
-# Built-in gateway allowlist — files whose path matches any of these
-# substrings are allowed to import model SDKs directly.
-DEFAULT_GATEWAY_ALLOWLIST=(
-  'src/ai/gateway'
-)
 
 # Let the project override the defaults. Reads are additive: any value
 # in the config is appended to the built-ins so a missing config still
@@ -68,15 +47,7 @@ done < <(config_list "$CONFIG" "audit.inline_prompt_patterns")
 SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" "${USER_SECRET_PATTERNS[@]}")
 GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" "${USER_GATEWAY_ALLOWLIST[@]}")
 
-# Join secret patterns into a single ERE alternation for grep.
-SECRET_RE=""
-for p in "${SECRET_PATTERNS[@]}"; do
-  if [ -z "$SECRET_RE" ]; then
-    SECRET_RE="$p"
-  else
-    SECRET_RE="${SECRET_RE}|${p}"
-  fi
-done
+SECRET_RE=$(join_secret_re SECRET_PATTERNS)
 
 # Build the inline prompt regex. If the user supplied patterns, they
 # extend the default alternation.
@@ -87,13 +58,7 @@ done
 
 # Helper — is $1 (a file path) allowed by the gateway allowlist?
 is_gateway_allowed() {
-  local path="$1"
-  for allow in "${GATEWAY_ALLOWLIST[@]}"; do
-    if [[ "$path" == *"$allow"* ]]; then
-      return 0
-    fi
-  done
-  return 1
+  _is_gateway_allowed "$1" GATEWAY_ALLOWLIST
 }
 
 CRITICAL=0
@@ -164,6 +129,27 @@ if [ -d prompts ]; then
   done
 fi
 
+# 6. Guardrail completeness — verify required keys exist.
+# Guardrails without numeric rate limits or cost ceilings are
+# incomplete and leave the feature unprotected against cost/rate abuse.
+if [ -d prompts/guardrails ]; then
+  for f in prompts/guardrails/*.yml; do
+    [ -f "$f" ] || continue
+    if ! grep -q "blocked_patterns:" "$f"; then
+      add_finding "WARN" "guardrail-missing-blocked_patterns: $f"
+    fi
+    if ! grep -q "redact_patterns:" "$f"; then
+      add_finding "WARN" "guardrail-missing-redact_patterns: $f"
+    fi
+    if ! grep -qE "rate_per_user_per_minute:[[:space:]]*[0-9]" "$f"; then
+      add_finding "WARN" "guardrail-missing-rate-limit: $f"
+    fi
+    if ! grep -qE "cost_ceiling_usd_per_day:[[:space:]]*[0-9]" "$f"; then
+      add_finding "WARN" "guardrail-missing-cost-ceiling: $f"
+    fi
+  done
+fi
+
 # Report
 echo
 echo "┌─────────────────────────────────────────────────┐"
@@ -186,8 +172,12 @@ TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER=$(git config user.name 2>/dev/null || echo "unknown")
 VERDICT="PASS"
 [ $CRITICAL -gt 0 ] && VERDICT="BLOCK"
-printf '{"ts":"%s","user":"%s","critical":%d,"warn":%d,"verdict":"%s"}\n' \
-  "$TS" "$USER" "$CRITICAL" "$WARN" "$VERDICT" >> "$AUDIT_LOG"
+jsonl_append "$AUDIT_LOG" \
+  "ts"       "$TS" \
+  "user"     "$USER" \
+  "critical" "$CRITICAL" \
+  "warn"     "$WARN" \
+  "verdict"  "$VERDICT"
 
 echo
 echo "VERDICT: $VERDICT (critical=$CRITICAL, warn=$WARN)"

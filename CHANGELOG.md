@@ -3,6 +3,93 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.3.0] — 2026-04-16
+
+### Added
+
+- **Project-root confinement.** All scripts that accept file path
+  arguments now validate paths stay inside the project directory
+  using `require_inside_project` in `lib/defaults.sh`. Resolves
+  symlinks via `os.path.realpath` and rejects any path that escapes
+  `$(pwd -P)`. Applies to `gate-check.sh` (spec path) and
+  `install-rules.sh` (`--docs` argument). Prevents path traversal
+  via `../..`, absolute paths, and symlink attacks.
+
+- **JSONL injection prevention.** All JSONL output (gate-log,
+  audit-log, red-team traces) is now produced by `jsonl_append` and
+  `jsonl_append_chained` in `lib/defaults.sh`, which pass every
+  value through Python's `json.dumps`. Shell metacharacters in git
+  usernames, spec titles, or red-team scenario text can no longer
+  break the JSON structure.
+
+- **Tamper-evident hash chain.** Every gate-log JSONL entry now
+  includes a `prev_hash` field containing the SHA-256 of the
+  previous line (or `"genesis"` for the first entry). Creates a
+  lightweight tamper-detection chain without cryptographic signing
+  dependencies.
+
+- **`lib/defaults.sh`** — new shared library extracted from the
+  duplicated pattern definitions in `audit.sh` and `gate-check.sh`.
+  Single source of truth for `DEFAULT_INLINE_PROMPT_RE`,
+  `DEFAULT_SECRET_PATTERNS`, `DEFAULT_GATEWAY_ALLOWLIST`, plus
+  shared helpers: `join_secret_re`, `_is_gateway_allowed`,
+  `require_inside_project`, `jsonl_append`, `jsonl_append_chained`.
+
+- **Guardrail completeness audit (check #6).** `audit.sh` now warns
+  on any guardrail YAML file missing `blocked_patterns`,
+  `redact_patterns`, `rate_per_user_per_minute`, or
+  `cost_ceiling_usd_per_day`.
+
+- **`never_run_against` config wired into red-team runner.** The
+  `red_team.never_run_against` config list is now read and checked
+  against the staging URL, in addition to the hardcoded `prod` /
+  `production` regex guard.
+
+- **Security Model docs page** at `/docs/security` — covers script
+  confinement, JSONL injection prevention, hash chain, guardrail
+  architecture (spec-time, implementation-time, runtime), secret
+  detection patterns, red-team safety layers, and chat Worker
+  defenses.
+
+- **Python 3 guard.** `config.sh` and `defaults.sh` now error
+  immediately with a clear message if `python3` is not installed,
+  instead of silently degrading to empty config reads.
+
+- **Chat Worker response size cap.** 64 KiB `TransformStream`
+  backstop on streamed AI responses.
+
+- **Chat Worker CORS hardening.** Localhost origins
+  (`localhost:3000-3999`) are no longer allowed in production by
+  default. Requires explicit `ALLOW_LOCAL_ORIGINS=true` env var.
+
+### Changed
+
+- **Gate B (Threat Model)** now verifies the STRIDE table contains
+  at least one content row (e.g. `| T1 | Spoofing |`), not just
+  the section heading. Empty threat model tables fail the gate.
+
+- **Gate D (Guardrails)** now verifies `rate_per_user_per_minute`
+  and `cost_ceiling_usd_per_day` are present and numeric in the
+  guardrail YAML, not just that `blocked_patterns` and
+  `redact_patterns` keys exist.
+
+- **ShellCheck is now enforcing in CI.** Removed `|| true` from the
+  shellcheck step in `test.yml` so lint failures block PRs.
+
+- **Secret patterns unified.** `gate-check.sh` Gate F previously
+  used a smaller subset of patterns than `audit.sh`. Both now share
+  the full set from `lib/defaults.sh`, including `DSA`, `ENCRYPTED`
+  private key variants, `xoxb-` Slack tokens, and `gho_`/`ghs_`
+  GitHub tokens.
+
+### Fixed
+
+- **Gate B operator precedence.** The `||`/`&&` check for the
+  threat model heading was parsed as `A || (B && C)` instead of the
+  intended `(A || B) && C`, meaning the STRIDE/Spoofing grep was
+  skipped when the `## Security / Threat Model` heading was found.
+  Added explicit `{ }` grouping.
+
 ## [0.2.6] — 2026-04-14
 
 ### Added

@@ -22,6 +22,15 @@
 # print nothing and exit 0, so callers can fall back to their built-in
 # defaults without special-casing errors.
 
+# Guard: config parsing requires Python 3. Fail fast with a clear
+# message instead of silently falling back to empty values (which
+# would weaken security coverage without any visible error).
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "error: speckit-security requires python3 but it is not installed." >&2
+  echo "  Install Python 3 and ensure it is on your PATH." >&2
+  exit 2
+fi
+
 # Shared Python parser used by both config_get and config_list. It
 # prints either a single scalar line or the list items one per line
 # for the requested dotted path.

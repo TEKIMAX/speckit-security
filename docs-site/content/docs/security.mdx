@@ -1,0 +1,235 @@
+---
+title: Security Model
+description: How speckit-security protects itself, confines scripts to the project directory, and enforces guardrails at every layer.
+---
+
+## Security architecture
+
+`speckit-security` operates at two levels:
+
+1. **Feature security** -- the six gates that enforce threat models, data contracts, guardrails, and red teaming on the features *you* build.
+2. **Self security** -- the measures that prevent the extension's own scripts from being exploited via path traversal, injection, or tampering.
+
+This page covers both.
+
+---
+
+## Script confinement
+
+Every bash script in `speckit-security` is confined to the project
+directory. Scripts **cannot read, write, or execute files outside the
+project root**, enforced by the `require_inside_project` helper in
+`lib/defaults.sh`.
+
+### How it works
+
+When a script receives a file path argument (e.g. `gate-check.sh <spec-path>`),
+it resolves the path to its canonical absolute form using Python's
+`os.path.realpath` (which follows symlinks) and verifies the resolved path
+starts with `$(pwd -P)` (the physical project root):
+
+```bash
+require_inside_project "$SPEC_PATH" "spec path"
+```
+
+If the path escapes the project -- via `../..` traversal, absolute
+paths like `/etc/passwd`, or symlinks pointing outside -- the script
+exits immediately with error code 2:
+
+```
+error: spec path escapes the project root.
+  resolved: /etc/passwd
+  project:  /home/user/my-project
+  speckit-security scripts are confined to the project directory.
+```
+
+### What is confined
+
+| Script | Input | Confinement |
+|--------|-------|-------------|
+| `gate-check.sh` | `$1` (spec file path) | `require_inside_project` before any read |
+| `install-rules.sh` | `--docs <path>` argument | `require_inside_project` before any write |
+| `audit.sh` | scans `src/` and `.` | Hardcoded relative paths, exclusion list for `node_modules`, `.git`, `dist`, `.next` |
+| `red-team-run.sh` | staging URL from config | Regex + `never_run_against` config list blocks production URLs |
+| `config.sh` | config YAML path | Hardcoded by callers to `.specify/extensions/.../config.yml` |
+
+### Log files
+
+All log files (gate-log, audit-log, red-team traces) are written to
+`.tekimax-security/` using hardcoded relative paths that cannot be
+overridden by user input.
+
+---
+
+## JSONL injection prevention
+
+Gate verdicts and audit results are written as JSONL (one JSON object
+per line). All JSONL output is produced by `jsonl_append` in
+`lib/defaults.sh`, which passes every value through Python's
+`json.dumps` -- shell metacharacters in git usernames, spec titles, or
+red-team scenario text cannot break the JSON structure or inject
+shell commands.
+
+```bash
+# Safe -- values are escaped by Python, not interpolated in bash
+jsonl_append "$GATE_LOG" \
+  "user"    "$USER" \
+  "verdict" "$VERDICT"
+```
+
+---
+
+## Tamper-evident hash chain
+
+Every gate-log entry includes a `prev_hash` field containing the
+SHA-256 of the previous line (or `"genesis"` for the first entry).
+This creates a lightweight hash chain: if any past entry is modified,
+the chain breaks and the tampering is detectable by recomputing hashes.
+
+```jsonl
+{"spec": "F-001", "verdict": "PASS", ..., "prev_hash": "genesis"}
+{"spec": "F-002", "verdict": "PASS", ..., "prev_hash": "sha256:a1b2c3..."}
+```
+
+The hash chain provides tamper **detection**. For tamper **proof**
+(cryptographic signatures with cosign/ed25519), a signing layer
+can be added on top -- see the [TEKIMAX website](https://tekimax.com)
+for commercial add-ons.
+
+---
+
+## Guardrail architecture
+
+The guardrail system operates at three layers:
+
+### Layer 1: Spec-time guardrails (Gate D)
+
+The `/speckit.tekimax-security.guardrails` command generates two files
+per feature:
+
+- `prompts/guardrails/<slug>.yml` -- machine-readable config with:
+  - `input.blocked_patterns` -- strings that reject the request
+  - `output.redact_patterns` -- regex patterns replaced in model output
+  - `limits.rate_per_user_per_minute` -- numeric rate limit
+  - `limits.cost_ceiling_usd_per_day` -- numeric cost ceiling
+- `prompts/system/<slug>.md` -- versioned system prompt with frontmatter
+
+Gate D in `gate-check.sh` verifies all five keys exist and that rate
+limit and cost ceiling are numeric (not placeholder text).
+
+### Layer 2: Implementation-time audit (Gate F)
+
+`audit.sh` scans the codebase for:
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Inline prompts in `src/` | CRITICAL | System prompts hardcoded in source instead of the versioned `.md` file |
+| Committed secrets | CRITICAL | API keys, private keys, tokens matching known patterns |
+| `.env` in git | CRITICAL | Environment files tracked by git |
+| Direct SDK imports | WARN | Model SDK imports outside the gateway allowlist |
+| Guardrail freshness | WARN | Guardrail YAML or system prompt edited without a version bump |
+| Guardrail completeness | WARN | Missing `blocked_patterns`, `redact_patterns`, rate limits, or cost ceilings |
+
+### Layer 3: Runtime guardrails
+
+The guardrail YAML is consumed by your AI gateway middleware at
+runtime. `speckit-security` enforces the *existence and completeness*
+of guardrails -- it does not run a gateway itself. The runtime
+enforcement depends on your stack:
+
+- **Input validation** -- the gateway loads `blocked_patterns` and
+  rejects matching messages before they reach the model
+- **Output redaction** -- the gateway loads `redact_patterns` and
+  replaces PII/sensitive patterns in model responses
+- **Rate limiting** -- the gateway enforces `rate_per_user_per_minute`
+- **Cost ceiling** -- the gateway enforces `cost_ceiling_usd_per_day`
+
+For a ready-made gateway client that loads your guardrail YAML at
+startup, see the [TEKIMAX website](https://tekimax.com) for
+commercial add-ons.
+
+---
+
+## Secret detection
+
+Both `gate-check.sh` (Gate F) and `audit.sh` scan for committed
+secrets using a shared set of patterns defined in `lib/defaults.sh`:
+
+| Pattern | What it matches |
+|---------|----------------|
+| `sk_live_...` / `sk_test_...` | Stripe API keys |
+| `-----BEGIN ... PRIVATE KEY-----` | RSA, EC, DSA, OPENSSH, encrypted private keys |
+| `xoxb-...` | Slack bot tokens |
+| `ghp_...` / `gho_...` / `ghs_...` | GitHub personal, OAuth, and server tokens |
+| `AKIA...` | AWS access key IDs |
+| `AIza...` | Google API keys |
+
+You can extend these with project-specific patterns in
+`tekimax-security-config.yml`:
+
+```yaml
+audit:
+  secret_patterns:
+    - "my_custom_live_[a-zA-Z0-9]{32,}"
+```
+
+User patterns are **additive** -- they extend the built-in defaults,
+never replace them.
+
+**Important:** the scripts never print the actual secret value. Only
+the file path is reported so the audit log itself doesn't become a
+leak vector.
+
+---
+
+## Red-team safety
+
+The automated red-team runner (`red-team-run.sh`) has multiple safety
+layers to prevent accidental use against production:
+
+1. **Hardcoded prod check** -- refuses any URL containing `prod` or
+   `production` (word-boundary regex)
+2. **Config blocklist** -- reads `red_team.never_run_against` from
+   your config and blocks any URL matching those entries
+3. **Rate limiting** -- capped at `red_team.max_rps` (default 10
+   requests/second)
+4. **Red-team header** -- every request includes
+   `X-Red-Team: tekimax-security` so staging logs can identify test traffic
+5. **Staging URL required** -- the runner refuses to start without an
+   explicit staging URL in config or environment
+
+---
+
+## Chat Worker security
+
+The docs chat at [speckit.tekimax.com/chat](https://speckit.tekimax.com/chat)
+runs on Cloudflare Workers with these defenses:
+
+| Defense | Implementation |
+|---------|---------------|
+| CORS origin allowlist | Only `ALLOWED_ORIGIN` (production domain); localhost requires explicit `ALLOW_LOCAL_ORIGINS=true` |
+| Input validation | Max 20 messages, 4000 chars per message, 20000 chars total |
+| Rate limiting | Cloudflare native binding: 20 req / 60s per client IP |
+| Response size cap | 64 KiB TransformStream backstop |
+| No API keys in code | Workers AI binding (Cloudflare authenticates internally) |
+| Grounded answers | System prompt instructs model to answer only from the docs corpus |
+
+---
+
+## What speckit-security is NOT
+
+This extension is **one layer** of a broader security program:
+
+- It is **not** a SAST tool -- it catches spec-level and commit-level issues,
+  not runtime vulnerabilities in your application code
+- It is **not** a dependency scanner -- use `npm audit`, Snyk, or
+  Dependabot alongside it
+- It is **not** a WAF or runtime monitor -- it enforces that guardrails
+  *exist*, not that they *work* at runtime
+- It is **not** a penetration testing replacement -- the red-team runner
+  tests AI-specific attack surfaces (prompt injection, jailbreak,
+  extraction), not network or infrastructure vulnerabilities
+
+Use it alongside your existing security tooling. It plugs the gap
+between "we wrote a spec" and "we verified the spec's security
+controls exist before writing code."

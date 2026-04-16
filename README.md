@@ -20,7 +20,7 @@
 
 [![Spec Kit Extension](https://img.shields.io/badge/spec--kit-extension-7c3aed)](https://github.com/github/spec-kit)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.6-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-green)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Docs](https://img.shields.io/badge/docs-speckit.tekimax.com-7c3aed)](https://speckit.tekimax.com)
 [![Ask AI](https://img.shields.io/badge/ask%20AI-chat-10b981)](https://speckit.tekimax.com/chat)
@@ -98,7 +98,7 @@ specify extension add --dev /path/to/speckit-security
 
 # 3. Verify
 specify extension list
-# → ✓ TEKIMAX Secure SDD (v0.2.6)
+# → ✓ TEKIMAX Secure SDD (v0.3.0)
 #       Security-first extension for Spec Kit
 #       Commands: 8 | Hooks: 5 | Status: Enabled
 ```
@@ -139,9 +139,9 @@ agent (Claude Code, Copilot, Gemini CLI). The typical flow:
 | Gate | Phase | Enforces |
 |---|---|---|
 | **A — Data Contract** | SPECIFY | Zod schemas, PII strategy, bias audit, drift thresholds, retention |
-| **B — Threat Model** | DESIGN | STRIDE table, no High/Critical unmitigated threats |
+| **B — Threat Model** | DESIGN | STRIDE table with content rows, no High/Critical unmitigated threats |
 | **C — Model Governance** | DESIGN | Version pinning, eval baselines, rollback plan |
-| **D — Guardrails** | SPECIFY/DESIGN | Input/output filters, rate limits, cost ceilings |
+| **D — Guardrails** | SPECIFY/DESIGN | Input/output filters, numeric rate limits, numeric cost ceilings |
 | **E — Red Team** | VERIFY | Adversarial scenarios, no succeeded High/Critical attacks |
 | **F — Inline Content Scan** | IMPLEMENT | No inline prompts, no secrets, no `.env` committed |
 
@@ -150,6 +150,13 @@ Each gate produces an append-only JSONL entry in
 Every run records the spec, phase, verdict, timestamp, user, and
 per-gate status, so you can reconstruct the decision trail for
 any feature that shipped.
+
+> **Note:** The open-source edition provides an audit *trail*
+> (append-only JSONL logs with a SHA-256 hash chain for tamper
+> detection), not cryptographic audit *integrity*. Log entries are
+> unsigned — anyone with repo write access can modify them. For
+> cryptographically signed gate-log attestation, contact
+> [TEKIMAX](https://tekimax.com) about commercial add-ons.
 
 ---
 
@@ -230,6 +237,7 @@ Together, they compound quality instead of debt.
 - [x] **v0.2.4** — Inline-prompt precision (stop flagging legal prose)
 - [x] **v0.2.5** — Config read-back for audit and gate-check (user entries extend built-ins for secret patterns, inline-prompt patterns, and allowlist)
 - [x] **v0.2.6** — Docs chat (Ask AI) grounded in the full docs corpus, powered by Llama 3.3 70B on Cloudflare Workers AI, with native Cloudflare rate limiting
+- [x] **v0.3.0** — Security hardening: project-root confinement, JSONL injection prevention, hash-chain tamper detection, Gate B/D validation improvements, guardrail completeness audit, ShellCheck enforcing in CI, new Security Model docs page
 - [x] **Spec Kit community catalog submission** ([PR #2215](https://github.com/github/spec-kit/pull/2215))
 - [ ] Formal plugin system for custom gates and audit checks
 - [ ] GitHub Actions workflow template for running gate-check in CI

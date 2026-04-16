@@ -35,6 +35,7 @@ interface RateLimiter {
 interface Env {
   AI: Ai;
   ALLOWED_ORIGIN: string;
+  ALLOW_LOCAL_ORIGINS?: string;
   RATE_LIMITER: RateLimiter;
 }
 
@@ -48,6 +49,10 @@ const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_MESSAGES = 20;
 const MAX_USER_CHARS = 4000;
 const MAX_TOTAL_CHARS = 20000;
+// Safety cap on streamed response size. Workers AI respects max_tokens
+// for Llama models, but this is a backstop in case the model or
+// provider behavior changes.
+const MAX_RESPONSE_BYTES = 64 * 1024; // 64 KiB
 
 const SYSTEM_PROMPT = `You are the speckit-security documentation assistant.
 
@@ -90,15 +95,19 @@ function corsHeaders(origin: string): HeadersInit {
   };
 }
 
-function originAllowed(req: Request, allowed: string): string | null {
+function originAllowed(req: Request, allowed: string, allowLocal?: string): string | null {
   const origin = req.headers.get('Origin');
   if (!origin) return null;
-  // Allow the configured production origin and common local dev
-  // origins (localhost ports 3000–3999) so `pnpm dev` works against
-  // the deployed worker.
+  // Allow the configured production origin.
   if (origin === allowed) return origin;
-  if (/^https?:\/\/localhost:3\d{3}$/.test(origin)) return origin;
-  if (/^https?:\/\/127\.0\.0\.1:3\d{3}$/.test(origin)) return origin;
+  // Only allow localhost origins when ALLOW_LOCAL_ORIGINS is
+  // explicitly set to "true" — prevents localhost CORS in production
+  // unless the operator opts in (e.g. for local dev against the
+  // deployed Worker).
+  if (allowLocal === 'true') {
+    if (/^https?:\/\/localhost:3\d{3}$/.test(origin)) return origin;
+    if (/^https?:\/\/127\.0\.0\.1:3\d{3}$/.test(origin)) return origin;
+  }
   return null;
 }
 
@@ -133,7 +142,7 @@ export default {
 
     // Preflight
     if (request.method === 'OPTIONS') {
-      const allowedOrigin = originAllowed(request, env.ALLOWED_ORIGIN);
+      const allowedOrigin = originAllowed(request, env.ALLOWED_ORIGIN, env.ALLOW_LOCAL_ORIGINS);
       if (!allowedOrigin) return new Response(null, { status: 403 });
       return new Response(null, { status: 204, headers: corsHeaders(allowedOrigin) });
     }
@@ -154,7 +163,7 @@ export default {
       return new Response('Not found', { status: 404 });
     }
 
-    const allowedOrigin = originAllowed(request, env.ALLOWED_ORIGIN);
+    const allowedOrigin = originAllowed(request, env.ALLOWED_ORIGIN, env.ALLOW_LOCAL_ORIGINS);
     if (!allowedOrigin) {
       return new Response(JSON.stringify({ error: 'origin not allowed' }), {
         status: 403,
@@ -215,7 +224,21 @@ export default {
       temperature: 0.2,
     })) as ReadableStream;
 
-    return new Response(aiResponse, {
+    // Cap streamed response size as a safety backstop.
+    let bytesWritten = 0;
+    const limiter = new TransformStream({
+      transform(chunk, controller) {
+        bytesWritten += chunk.byteLength ?? chunk.length ?? 0;
+        if (bytesWritten <= MAX_RESPONSE_BYTES) {
+          controller.enqueue(chunk);
+        } else {
+          controller.terminate();
+        }
+      },
+    });
+    const cappedStream = aiResponse.pipeThrough(limiter);
+
+    return new Response(cappedStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',

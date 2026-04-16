@@ -19,6 +19,7 @@ assert_contains "$fixture/gc.out" "VERDICT: PASS" "verdict"
 assert_contains "$fixture/gc.out" "Gate A — Data Contract" "gate A label"
 assert_contains "$fixture/gc.out" "Gate F — Inline Content Scan" "gate F label"
 assert_file_exists "$fixture/.tekimax-security/gate-log.jsonl" "gate log"
-assert_contains "$fixture/.tekimax-security/gate-log.jsonl" '"verdict":"PASS"' "gate log verdict"
+assert_contains "$fixture/.tekimax-security/gate-log.jsonl" '"verdict": "PASS"' "gate log verdict"
+assert_contains "$fixture/.tekimax-security/gate-log.jsonl" '"prev_hash": "genesis"' "gate log hash chain"
 
 echo "✓ $(basename "$0")"
