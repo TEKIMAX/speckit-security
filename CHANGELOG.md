@@ -3,6 +3,59 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [0.3.1] — 2026-04-16
+
+### Added
+
+- **Gate G — Dependency CVEs.** New `scripts/bash/dep-audit.sh` and
+  `speckit.tekimax-security.dep-audit` command. Resolution order:
+  `osv-scanner` (polyglot, preferred) → `pnpm audit` → `npm audit`
+  → `yarn npm audit`. Skips cleanly when no scanner is available.
+  Threshold configurable via `dep_audit.fail_on`
+  (`low` | `moderate` | `high` | `critical`, default `high`).
+  Opt-out via `dep_audit.enabled: false`. Gate G runs automatically
+  as part of `gate-check` and logs to
+  `.tekimax-security/dep-audit-log.jsonl`.
+- **Polyglot file coverage.** Gate F and the audit now scan Go,
+  Rust, Ruby, Java, Kotlin, Swift, PHP, shell, YAML, JSON, TOML,
+  Terraform, and Markdown by default — secrets and inline prompts
+  commonly live outside TS/Py. Defaults live in
+  `lib/defaults.sh:DEFAULT_INCLUDE_EXTS`.
+- **`audit.include_globs` and `audit.exclude_paths` config keys**
+  to extend the polyglot scan without replacing defaults.
+- **`audit.direct_sdk_patterns` config key.** Extend the default
+  SDK list (`@google/genai`, `@anthropic-ai/sdk`, `openai`,
+  `cohere-ai`, `@mistralai/mistralai`,
+  `@aws-sdk/client-bedrock-runtime`, `replicate`, `together-ai`)
+  with any provider your stack adopts.
+- **`--staged-only` flag** on `audit.sh` and `gate-check.sh`.
+  Scans only files in the git index. Pre-commit-hook-friendly: a
+  typical change touches <5 files, not the whole tree.
+- **`--json` flag** on `audit.sh`, `gate-check.sh`, and
+  `dep-audit.sh`. Emits machine-readable findings alongside (or in
+  place of) the human table so CI jobs and dashboards don't have
+  to re-parse the log file.
+- **`build_exclude_regex` and `scan_staged_files`** helpers in
+  `lib/defaults.sh` to support polyglot and staged-file scans.
+- **Three regression tests:**
+  `anchored-allowlist-rejects-prefix-bypass.sh`,
+  `polyglot-go-secret.sh`, `env-in-subdirectory.sh`. Suite is 18/18.
+
+### Changed
+
+- **Gateway allowlist uses anchored matching.**
+  `_is_gateway_allowed` in `lib/defaults.sh` now matches only at
+  the exact path, as a directory prefix with a '/' boundary, or
+  with a file-extension append. An entry `src/ai/gateway` no
+  longer silently matches `src/ai/gateway-bypass.ts`. Teams that
+  relied on the substring match must list full file paths or the
+  containing directory.
+- **`.env` detection is recursive.** `apps/*/.env`,
+  `packages/*/.env.local`, and similar nested env files are now
+  detected; previously only the repo root was checked.
+  `.env.example`, `.env.sample`, and `.env.template` remain
+  allowed.
+
 ## [0.3.0] — 2026-04-16
 
 ### Added

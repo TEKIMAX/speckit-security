@@ -3,7 +3,22 @@
 `speckit-security` is designed to be stack-agnostic. You can adapt it
 to your team's conventions, tools, and policies without forking the
 repo. This guide walks through every supported customization point in
-v0.2.0.
+v0.3.1.
+
+## What's new in v0.3.1
+
+- `audit.include_globs` and `audit.exclude_paths` extend the polyglot
+  default scan coverage.
+- `audit.direct_sdk_patterns` extends the built-in list of provider
+  SDKs flagged outside the gateway.
+- `dep_audit.*` configures Gate G — dependency CVE scanning via
+  `osv-scanner` or the project's package manager.
+- `--staged-only` and `--json` flags on `audit.sh`,
+  `gate-check.sh`, and `dep-audit.sh` make pre-commit hooks and CI
+  integrations cheap.
+- Allowlist matching is anchored — `src/ai/gateway` no longer
+  silently matches `src/ai/gateway-bypass.ts`. Add full file paths
+  or directories to the allowlist.
 
 > **Note on extensibility:** v0.2.0 does **not** expose a formal plugin
 > system for registering custom commands, gates, or audit checks.
@@ -219,8 +234,8 @@ file in a gateway directory.
 ## 6. Adjusting secret and inline-prompt patterns
 
 Both the gate-check and the audit scripts detect committed secrets and
-inline prompts using configurable regex patterns. Override the defaults
-in the config file:
+inline prompts using configurable regex patterns. User entries
+**extend** the built-in defaults:
 
 ```yaml
 audit:
@@ -235,20 +250,97 @@ audit:
   secret_patterns:
     - "sk_live_"
     - "PRIVATE_KEY"
-    - "BEGIN RSA"
     # Add tokens specific to your stack
-    - "my_company_internal_"
+    - "my_company_internal_[A-Za-z0-9]{32,}"
 
-  file_scope:
-    - "src/**/*.ts"
-    - "src/**/*.tsx"
-    - "src/**/*.py"
-    # Add directories specific to your layout
-    - "workers/**/*.ts"
-    - "lib/ai/**/*.ts"
+  # Polyglot default is TS/JS/Py/Go/Rs/Ruby/Java/Kt/Swift/PHP/Sh/
+  # YAML/JSON/TOML/TF/MD. Add extra extensions here if your codebase
+  # uses them.
+  include_globs:
+    - "*.vue"
+    - "*.svelte"
+
+  # Extends the default exclude list (node_modules, .git, dist, build,
+  # target, .next, out, .venv, venv, coverage, .tekimax-security).
+  exclude_paths:
+    - "fixtures/"
+    - "examples/"
+
+  # Extends the default direct-SDK list (@google/genai,
+  # @anthropic-ai/sdk, openai, cohere-ai, @mistralai/mistralai,
+  # @aws-sdk/client-bedrock-runtime, replicate, together-ai).
+  direct_sdk_patterns:
+    - "fireworks-ai"
+    - "@groq/groq-sdk"
 ```
 
 The defaults catch the common cases. Tune them to your codebase.
+
+## 7. Dependency CVE scanning (Gate G)
+
+`dep-audit.sh` runs automatically as Gate G during `gate-check`
+and can also be invoked directly
+(`/speckit.tekimax-security.dep-audit`).
+
+```yaml
+dep_audit:
+  enabled: true            # set to false to skip Gate G entirely
+  fail_on: high            # low | moderate | high | critical
+```
+
+Scanner resolution order (first available wins):
+
+1. **`osv-scanner`** on `PATH` — preferred. Polyglot (npm, pypi,
+   cargo, go, maven, gem), no account needed, queries OSV.dev.
+   Install once per machine:
+
+   ```bash
+   brew install osv-scanner                                        # macOS
+   go install github.com/google/osv-scanner/cmd/osv-scanner@v1    # anywhere
+   ```
+
+2. `pnpm audit` — if `pnpm-lock.yaml` is present.
+3. `npm audit` — if `package-lock.json` is present.
+4. `yarn npm audit` — if `yarn.lock` is present (Yarn 2+).
+5. Skip cleanly if none are available (exit 0).
+
+## 8. Pre-commit / CI friction knobs
+
+Both `audit.sh` and `gate-check.sh` take two flags that make them
+cheap to call in tight feedback loops.
+
+| Flag | Effect |
+|---|---|
+| `--staged-only` | Scan only files in the git index (added/copied/modified). Typical pre-commit scan touches <5 files. |
+| `--json`        | Emit a machine-readable findings object in addition to (or in place of) the human table. Safe for CI log parsing. |
+
+Examples:
+
+```bash
+# Pre-commit hook
+bash .specify/extensions/tekimax-security/scripts/bash/audit.sh --staged-only
+
+# CI
+bash .specify/extensions/tekimax-security/scripts/bash/gate-check.sh \
+  ".specify/specs/F-042-checkout.md" --json \
+  | tee gate-check-report.json
+```
+
+## 9. Allowlist matching rules
+
+The `audit.allowlist.stack_direct_sdk` entries are matched against
+file paths using an **anchored** rule:
+
+- `src/ai/gateway`          — matches the exact path,
+                              `src/ai/gateway.ts`, or any
+                              `src/ai/gateway/…` subdirectory
+- `src/ai/gateway-bypass.ts` — is **not** matched by
+                              `src/ai/gateway`. List it
+                              explicitly or use a directory entry
+                              instead.
+
+Use full file paths for single-file allowlists; use directory
+entries (`workers/ai`, `src/platform/ai`) to cover a whole area.
 
 ---
 
