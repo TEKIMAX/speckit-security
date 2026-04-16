@@ -20,7 +20,7 @@
 
 [![Spec Kit Extension](https://img.shields.io/badge/spec--kit-extension-7c3aed)](https://github.com/github/spec-kit)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.1-green)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Docs](https://img.shields.io/badge/docs-speckit.tekimax.com-7c3aed)](https://speckit.tekimax.com)
 [![Ask AI](https://img.shields.io/badge/ask%20AI-chat-10b981)](https://speckit.tekimax.com/chat)
@@ -62,6 +62,7 @@ follows automatically via Spec Kit hooks.
 | `/speckit.tekimax-security.gate-check` | `before_implement` | Blocks implementation until all security sections pass |
 | `/speckit.tekimax-security.audit` | `after_implement` | Inline prompts, committed secrets, direct SDK imports, guardrail drift |
 | `/speckit.tekimax-security.red-team` | `before_analyze` | Adversarial testing — prompt injection, jailbreak, extraction, auth bypass |
+| `/speckit.tekimax-security.dep-audit` | part of `gate-check` | Dependency CVEs (Gate G) via osv-scanner / pnpm / npm / yarn |
 | `/speckit.tekimax-security.install-rules` | manual | Installs a `DEVELOPMENT-RULES.md` into your project — commit hygiene, file structure, DRY, naming, inline docs, unit test rules |
 
 ---
@@ -137,7 +138,7 @@ agent (Claude Code, Copilot, Gemini CLI). The typical flow:
 
 ---
 
-## The Six Security Gates
+## The Seven Security Gates
 
 | Gate | Phase | Enforces |
 |---|---|---|
@@ -146,7 +147,8 @@ agent (Claude Code, Copilot, Gemini CLI). The typical flow:
 | **C — Model Governance** | DESIGN | Version pinning, eval baselines, rollback plan |
 | **D — Guardrails** | SPECIFY/DESIGN | Input/output filters, numeric rate limits, numeric cost ceilings |
 | **E — Red Team** | VERIFY | Adversarial scenarios, no succeeded High/Critical attacks |
-| **F — Inline Content Scan** | IMPLEMENT | No inline prompts, no secrets, no `.env` committed |
+| **F — Inline Content Scan** | IMPLEMENT | No inline prompts, no secrets, no `.env` committed — **polyglot** (TS/JS/Py/Go/Rs/Java/Kt/Swift/Rb/Sh/YAML/TF/Toml/MD), recursive `.env` detection |
+| **G — Dependency CVEs** | IMPLEMENT | `osv-scanner` (preferred) or `pnpm` / `npm` / `yarn audit`, threshold-gated |
 
 Each gate produces an append-only JSONL entry in
 `.tekimax-security/gate-log.jsonl` for compliance audit trails.

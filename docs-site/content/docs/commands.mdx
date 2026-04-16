@@ -1,9 +1,9 @@
 ---
 title: Commands
-description: The eight slash commands speckit-security adds to Spec Kit.
+description: The nine slash commands speckit-security adds to Spec Kit.
 ---
 
-`speckit-security` adds **eight slash commands** to whichever AI agent
+`speckit-security` adds **nine slash commands** to whichever AI agent
 you're using. Every command is an agent-neutral Markdown file under
 `commands/` in the extension repo, Spec Kit translates each one into
 the active agent's native format on install.
@@ -14,8 +14,9 @@ the active agent's native format on install.
 | `threat-model` | Generate a STRIDE threat model for the active spec |
 | `model-governance` | Pin model version, define eval baselines, write rollback plan |
 | `guardrails` | Generate versioned system prompt + guardrail YAML for AI features |
-| `gate-check` | Run all six gates against the active spec, emit verdict |
-| `audit` | Post-implementation scan, inline prompts, secrets, direct SDKs |
+| `gate-check` | Run all seven gates against the active spec, emit verdict |
+| `audit` | Post-implementation scan — inline prompts, secrets, direct SDKs (polyglot) |
+| `dep-audit` | Dependency CVE scan (Gate G) via osv-scanner / pnpm / npm / yarn |
 | `red-team` | Generate adversarial scenarios; `--run` hits staging automatically |
 | `install-rules` | Install dev rules into docs, constitution, and agent context file |
 

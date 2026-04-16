@@ -6,26 +6,38 @@ description: Config file, template overrides, hook toggling, allowlists, and env
 `speckit-security` is designed to be vendor-agnostic. You can adapt
 it to your team's conventions, tools, and policies without forking
 the repo. This page walks through every supported customization
-point in v0.2.5.
+point in v0.3.1.
 
 <Callout type="info">
   **What the scripts actually read from the config:**
 
   - ✅ `red_team.staging_url`
-  - ✅ `red_team.max_rps` (new in v0.2.5)
-  - ✅ `audit.secret_patterns` (extends built-ins; new in v0.2.5)
-  - ✅ `audit.inline_prompt_patterns` (extends built-ins; new in v0.2.5)
-  - ✅ `audit.allowlist.stack_direct_sdk` (extends built-ins; new in v0.2.5)
+  - ✅ `red_team.max_rps`
+  - ✅ `red_team.never_run_against`
+  - ✅ `audit.secret_patterns` (extends built-ins)
+  - ✅ `audit.inline_prompt_patterns` (extends built-ins)
+  - ✅ `audit.allowlist.stack_direct_sdk` (extends built-ins, **anchored** in v0.3.1)
+  - ✅ `audit.include_globs` (extends polyglot defaults — **new in v0.3.1**)
+  - ✅ `audit.exclude_paths` (extends the default exclude list — **new in v0.3.1**)
+  - ✅ `audit.direct_sdk_patterns` (extends built-ins — **new in v0.3.1**)
+  - ✅ `dep_audit.enabled`, `dep_audit.fail_on` (Gate G — **new in v0.3.1**)
   - ⏳ `required_sections` — still hardcoded (Gate A/B header text)
-  - ⏳ `audit.file_scope` — still hardcoded
-  - ⏳ `red_team.never_run_against` — hardcoded on purpose (defense in depth)
   - 🛈 `enforcement`, `stack.*` — informational, read by humans
     and by Spec Kit's hook runtime (not the individual scripts)
 
-  User-supplied patterns and allowlist entries are **additive**:
-  they extend the built-in defaults rather than replacing them. A
-  missing config file means full built-in coverage, so adoption is
-  safe by default.
+  User-supplied patterns, paths, and allowlist entries are
+  **additive**: they extend the built-in defaults rather than
+  replacing them. A missing config file means full built-in
+  coverage, so adoption is safe by default.
+</Callout>
+
+<Callout type="warn">
+  **v0.3.1 allowlist is anchored.** `src/ai/gateway` now matches
+  the exact path, a directory prefix with a `/` boundary, or a
+  file-extension append — it does **not** silently allowlist
+  `src/ai/gateway-bypass.ts`. If your project relied on the
+  looser substring match, list full file paths or use directory
+  entries like `workers/ai`.
 </Callout>
 
 <Callout type="info">

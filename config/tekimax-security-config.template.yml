@@ -20,6 +20,10 @@ stack:
   storage: <your-storage>
 
 audit:
+  # User entries extend the built-in defaults from lib/defaults.sh.
+  # The defaults are polyglot — TS/JS/Py/Go/Rs/Ruby/Java/Kt/Swift/
+  # PHP/Sh/YAML/JSON/Toml/TF/MD — so most teams only add
+  # project-specific markers here.
   inline_prompt_patterns:
     - "you\\s+are\\s+a"
     - "as\\s+an\\s+ai"
@@ -35,16 +39,43 @@ audit:
     - "ghp_[0-9a-zA-Z]{36}"
     - "AKIA[0-9A-Z]{16}"
     - "AIza[0-9A-Za-z-_]{35}"
-  file_scope:
-    - "src/**/*.ts"
-    - "src/**/*.tsx"
-    - "src/**/*.js"
-    - "src/**/*.jsx"
-    - "src/**/*.py"
+
+  # Extra file extensions to scan beyond the polyglot defaults.
+  # Format: glob patterns matching filenames (not paths).
+  include_globs:
+    - "*.vue"
+    - "*.svelte"
+
+  # Path fragments skipped during recursive scans. Extends the
+  # default exclude list (node_modules, .git, dist, build, target,
+  # .next, out, .venv, venv, coverage, etc.).
+  exclude_paths:
+    - "fixtures/"
+    - "examples/"
+
+  # Direct-SDK import detection. Extends the built-in list
+  # (@google/genai, @anthropic-ai/sdk, openai, cohere-ai,
+  # @mistralai/mistralai, @aws-sdk/client-bedrock-runtime, replicate,
+  # together-ai). Add packages specific to your stack.
+  direct_sdk_patterns:
+    - "fireworks-ai"
+    - "@groq/groq-sdk"
+
   allowlist:
-    # Files allowed to import model SDKs directly (gateway internals only)
+    # Files allowed to import model SDKs directly (gateway internals
+    # only). Anchored match — `src/ai/gateway-bypass.ts` will NOT
+    # inherit an `src/ai/gateway` entry. Use a directory entry or
+    # list the full file path.
     stack_direct_sdk:
-      - "src/ai/gateway.ts"
+      - "src/ai/gateway"
+      - "workers/ai"
+
+# Gate G — Dependency CVE scan. Uses osv-scanner when available
+# (polyglot, no account, no network auth), else pnpm / npm / yarn
+# audit against the project's lockfile.
+dep_audit:
+  enabled: true             # set to false to skip Gate G entirely
+  fail_on: high             # low | moderate | high | critical
 
 red_team:
   staging_url: "${SPECKIT_TEKIMAX_SECURITY_STAGING_URL}"

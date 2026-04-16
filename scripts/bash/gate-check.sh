@@ -2,7 +2,7 @@
 # TEKIMAX Secure SDD — gate-check
 # Invoked by speckit.tekimax-security.gate-check
 #
-# Usage: gate-check.sh <spec-path>
+# Usage: gate-check.sh <spec-path> [--staged-only] [--json]
 #
 # Exits 0 on PASS, 1 on BLOCK, 2 on error.
 
@@ -14,7 +14,18 @@ source "$SCRIPT_DIR/lib/config.sh"
 # shellcheck source=lib/defaults.sh
 source "$SCRIPT_DIR/lib/defaults.sh"
 
-SPEC_PATH="${1:-}"
+SPEC_PATH=""
+STAGED_ONLY=0
+EMIT_JSON=0
+for arg in "$@"; do
+  case "$arg" in
+    --staged-only) STAGED_ONLY=1 ;;
+    --json)        EMIT_JSON=1 ;;
+    -*)            ;;
+    *)             [ -z "$SPEC_PATH" ] && SPEC_PATH="$arg" ;;
+  esac
+done
+
 if [ -z "$SPEC_PATH" ] || [ ! -f "$SPEC_PATH" ]; then
   echo "error: spec path missing or not a file: $SPEC_PATH" >&2
   exit 2
@@ -51,6 +62,16 @@ while IFS= read -r item; do
   [ -n "$item" ] && USER_GATEWAY_ALLOWLIST+=("$item")
 done < <(config_list "$CONFIG" "audit.allowlist.stack_direct_sdk")
 
+USER_INCLUDE_GLOBS=()
+while IFS= read -r item; do
+  [ -n "$item" ] && USER_INCLUDE_GLOBS+=("$item")
+done < <(config_list "$CONFIG" "audit.include_globs")
+
+USER_EXCLUDE_PATHS=()
+while IFS= read -r item; do
+  [ -n "$item" ] && USER_EXCLUDE_PATHS+=("$item")
+done < <(config_list "$CONFIG" "audit.exclude_paths")
+
 # Use ${arr[@]+"${arr[@]}"} to avoid "unbound variable" on bash 3.2
 # when the user arrays are empty (macOS ships bash 3.2 by default).
 INLINE_PROMPT_RE="$DEFAULT_INLINE_PROMPT_RE"
@@ -65,6 +86,14 @@ GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" ${USER_GATEWAY_ALLOWLIST[@]
 is_gateway_allowed() {
   _is_gateway_allowed "$1" GATEWAY_ALLOWLIST
 }
+
+INCLUDE_EXTS=("${DEFAULT_INCLUDE_EXTS[@]}" ${USER_INCLUDE_GLOBS[@]+"${USER_INCLUDE_GLOBS[@]}"})
+EXCLUDE_PATTERNS=("${DEFAULT_EXCLUDE_PATTERNS[@]}" ${USER_EXCLUDE_PATHS[@]+"${USER_EXCLUDE_PATHS[@]}"})
+
+INCLUDE_ARGS=()
+for ext in "${INCLUDE_EXTS[@]}"; do INCLUDE_ARGS+=("--include=$ext"); done
+INCLUDE_ARGS+=("--include=*.env*")
+EXCLUDE_RE=$(build_exclude_regex EXCLUDE_PATTERNS)
 
 SPEC_ID=$(basename "$SPEC_PATH" .md | grep -oE '^(F|SEC|ADR|INT)-[0-9]+' || echo "UNKNOWN")
 SPEC_SLUG=$(basename "$SPEC_PATH" .md | sed -E 's/^(F|SEC|ADR|INT)-[0-9]+-//')
@@ -81,6 +110,7 @@ G_C=""
 G_D=""
 G_E=""
 G_F=""
+G_G=""
 
 check_section() {
   local heading="$1"
@@ -179,30 +209,54 @@ else
   SKIP=1
 fi
 
-# Gate F — Inline Content Scan
+# Gate F — Inline Content Scan (polyglot).
 INLINE_HIT=0
-if [ -d src ]; then
-  raw_hits=$(grep -rIliE "$INLINE_PROMPT_RE" \
-       --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" \
-       src 2>/dev/null || true)
-  # Drop allowlisted files
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    if ! is_gateway_allowed "$f"; then
-      INLINE_HIT=1
-      break
-    fi
-  done <<< "$raw_hits"
-fi
 SECRET_HIT=0
-if grep -rIl -E "($SECRET_RE)" \
-     --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" \
-     . 2>/dev/null | grep -vE "(node_modules|\.git/|\.next/|out/|\.source/|\.wrangler/|dist/)" | grep -q .; then
-  SECRET_HIT=1
-fi
 ENV_COMMITTED=0
-if git ls-files 2>/dev/null | grep -qE '^\.env(\..*)?$'; then
-  ENV_COMMITTED=1
+
+if [ "$STAGED_ONLY" = "1" ]; then
+  STAGED_FILES=$(scan_staged_files INCLUDE_EXTS EXCLUDE_PATTERNS)
+  if [ -n "$STAGED_FILES" ]; then
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      [ -f "$f" ] || continue
+      if ! is_gateway_allowed "$f"; then
+        if grep -liE "$INLINE_PROMPT_RE" "$f" >/dev/null 2>&1; then
+          INLINE_HIT=1
+        fi
+      fi
+      if grep -lE "($SECRET_RE)" "$f" >/dev/null 2>&1; then
+        SECRET_HIT=1
+      fi
+    done <<< "$STAGED_FILES"
+  fi
+else
+  if [ -d src ]; then
+    raw_hits=$(grep -rIliE "$INLINE_PROMPT_RE" "${INCLUDE_ARGS[@]}" src 2>/dev/null || true)
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      if ! is_gateway_allowed "$f"; then
+        INLINE_HIT=1
+        break
+      fi
+    done <<< "$raw_hits"
+  fi
+  if grep -rIl -E "($SECRET_RE)" "${INCLUDE_ARGS[@]}" . 2>/dev/null \
+       | { if [ -n "$EXCLUDE_RE" ]; then grep -vE "($EXCLUDE_RE)"; else cat; fi; } \
+       | grep -q .; then
+    SECRET_HIT=1
+  fi
+fi
+
+# Recursive .env detection. .env.example / .sample / .template remain
+# documentation and are not flagged.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git ls-files 2>/dev/null \
+       | grep -E '(^|/)\.env($|\.)' \
+       | grep -vE '\.env\.(example|sample|template)$' \
+       | grep -q .; then
+    ENV_COMMITTED=1
+  fi
 fi
 
 if [ $INLINE_HIT -eq 0 ] && [ $SECRET_HIT -eq 0 ] && [ $ENV_COMMITTED -eq 0 ]; then
@@ -216,46 +270,77 @@ else
   FAIL=1
 fi
 
-# Report
-echo
-echo "┌─────────────────────────────────────────────────┐"
-printf "│ Security Gate Check — %-26s │\n" "$SPEC_ID"
-echo "├─────────────────────────────────────────────────┤"
-for key in A B C D E F; do
-  label=""
-  case $key in
-    A) label="Gate A — Data Contract" ;;
-    B) label="Gate B — Threat Model" ;;
-    C) label="Gate C — Model Governance" ;;
-    D) label="Gate D — Guardrails" ;;
-    E) label="Gate E — Red Team" ;;
-    F) label="Gate F — Inline Content Scan" ;;
+# Gate G — Dependency CVEs. Runs dep-audit.sh when available and
+# enabled; skips cleanly when no scanner is installed or config
+# opts out.
+DEP_ENABLED=$(config_get "$CONFIG" "dep_audit.enabled" 2>/dev/null || true)
+[ -z "$DEP_ENABLED" ] && DEP_ENABLED="true"
+if [ "$DEP_ENABLED" = "false" ]; then
+  G_G="skip: disabled via config"
+  SKIP=1
+elif [ -x "$SCRIPT_DIR/dep-audit.sh" ]; then
+  DEP_OUT=$("$SCRIPT_DIR/dep-audit.sh" 2>&1 || true)
+  case "$DEP_OUT" in
+    *"VERDICT: PASS"*)  G_G="pass" ;;
+    *"VERDICT: BLOCK"*) G_G="fail: vulnerable deps at/above threshold"; FAIL=1 ;;
+    *)                  G_G="skip: no scanner available"; SKIP=1 ;;
   esac
-  varname="G_$key"
-  status="${!varname}"
-  icon="✅"
-  case "$status" in
-    fail:*) icon="❌" ;;
-    skip:*) icon="⚠ " ;;
-  esac
-  printf "│ %-30s %s  %-9s │\n" "$label" "$icon" "${status%%:*}"
-  if [ "${status%%:*}" = "fail" ] || [ "${status%%:*}" = "skip" ]; then
-    printf "│   %-45s │\n" "${status#*: }"
-  fi
-done
-echo "└─────────────────────────────────────────────────┘"
+else
+  G_G="skip: dep-audit.sh not installed"
+  SKIP=1
+fi
+
+# Report (human)
+if [ "$EMIT_JSON" = "0" ]; then
+  echo
+  echo "┌─────────────────────────────────────────────────┐"
+  printf "│ Security Gate Check — %-26s │\n" "$SPEC_ID"
+  echo "├─────────────────────────────────────────────────┤"
+  for key in A B C D E F G; do
+    label=""
+    case $key in
+      A) label="Gate A — Data Contract" ;;
+      B) label="Gate B — Threat Model" ;;
+      C) label="Gate C — Model Governance" ;;
+      D) label="Gate D — Guardrails" ;;
+      E) label="Gate E — Red Team" ;;
+      F) label="Gate F — Inline Content Scan" ;;
+      G) label="Gate G — Dependency CVEs" ;;
+    esac
+    varname="G_$key"
+    status="${!varname}"
+    icon="✅"
+    case "$status" in
+      fail:*) icon="❌" ;;
+      skip:*) icon="⚠ " ;;
+    esac
+    printf "│ %-30s %s  %-9s │\n" "$label" "$icon" "${status%%:*}"
+    if [ "${status%%:*}" = "fail" ] || [ "${status%%:*}" = "skip" ]; then
+      printf "│   %-45s │\n" "${status#*: }"
+    fi
+  done
+  echo "└─────────────────────────────────────────────────┘"
+fi
 
 if [ $FAIL -eq 1 ]; then
   VERDICT="BLOCK"
 else
   VERDICT="PASS"
 fi
-echo
-echo "VERDICT: $VERDICT"
 
-# Append to gate log (JSONL) — uses jsonl_append_chained from
-# lib/defaults.sh for tamper-evident hash chain (each line includes
-# the SHA-256 of the previous line).
+if [ "$EMIT_JSON" = "1" ]; then
+  printf '{"tool":"speckit-security","command":"gate-check","spec":"%s","verdict":"%s","staged_only":%s,"gates":{"A":"%s","B":"%s","C":"%s","D":"%s","E":"%s","F":"%s","G":"%s"}}\n' \
+    "$SPEC_ID" "$VERDICT" "$STAGED_ONLY" \
+    "${G_A//\"/\\\"}" "${G_B//\"/\\\"}" "${G_C//\"/\\\"}" \
+    "${G_D//\"/\\\"}" "${G_E//\"/\\\"}" "${G_F//\"/\\\"}" "${G_G//\"/\\\"}"
+else
+  echo
+  echo "VERDICT: $VERDICT"
+fi
+
+# Append to gate log (JSONL) — uses jsonl_append_chained for
+# tamper-evident hash chain (each line includes the SHA-256 of the
+# previous line).
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER=$(git config user.name 2>/dev/null || echo "unknown")
 PHASE="${SPECKIT_PHASE:-before_implement}"
@@ -270,7 +355,8 @@ jsonl_append_chained "$GATE_LOG" \
   "gates.C" "${G_C%%:*}" \
   "gates.D" "${G_D%%:*}" \
   "gates.E" "${G_E%%:*}" \
-  "gates.F" "${G_F%%:*}"
+  "gates.F" "${G_F%%:*}" \
+  "gates.G" "${G_G%%:*}"
 
 if [ "$VERDICT" = "PASS" ]; then
   exit 0

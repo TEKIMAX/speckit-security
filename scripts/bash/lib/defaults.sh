@@ -73,10 +73,58 @@ DEFAULT_SECRET_PATTERNS=(
   'AIza[0-9A-Za-z_\-]{35}'
 )
 
-# Gateway allowlist — file path substrings whose imports of model SDKs
-# are considered legitimate (the gateway client itself).
+# Gateway allowlist — paths whose imports of model SDKs are considered
+# legitimate (the gateway client itself). Match is anchored: an entry
+# matches only at an exact path, as a directory prefix with a '/'
+# boundary, or with a file-extension append. See _is_gateway_allowed.
 DEFAULT_GATEWAY_ALLOWLIST=(
   'src/ai/gateway'
+)
+
+# Polyglot file extensions scanned by Gate F and the audit. Secrets and
+# inline prompts frequently live outside TS/Py — CI YAML, Terraform,
+# shell scripts are common leak sources. User config extends this via
+# audit.include_globs.
+DEFAULT_INCLUDE_EXTS=(
+  "*.ts" "*.tsx" "*.js" "*.jsx" "*.mjs" "*.cjs"
+  "*.py" "*.rb" "*.go" "*.rs" "*.java" "*.kt" "*.swift" "*.php"
+  "*.sh" "*.bash" "*.zsh"
+  "*.yml" "*.yaml" "*.json" "*.toml" "*.tf" "*.tfvars"
+  "*.md" "*.mdx"
+)
+
+# Path fragments skipped during recursive scans. User config extends
+# this via audit.exclude_paths.
+DEFAULT_EXCLUDE_PATTERNS=(
+  "node_modules/"
+  ".git/"
+  "dist/"
+  "build/"
+  "target/"
+  "vendor/"
+  ".next/"
+  "out/"
+  ".source/"
+  ".wrangler/"
+  ".venv/"
+  "venv/"
+  "__pycache__/"
+  ".tekimax-security/"
+  "coverage/"
+  ".nuxt/"
+)
+
+# Direct-SDK import patterns flagged outside the gateway allowlist.
+# User config extends this via audit.direct_sdk_patterns.
+DEFAULT_DIRECT_SDK_PATTERNS=(
+  "@google/genai"
+  "@anthropic-ai/sdk"
+  "openai"
+  "cohere-ai"
+  "@mistralai/mistralai"
+  "@aws-sdk/client-bedrock-runtime"
+  "replicate"
+  "together-ai"
 )
 
 # join_secret_re <array-name>
@@ -104,18 +152,77 @@ join_secret_re() {
 
 # _is_gateway_allowed <path> <allowlist-array-name>
 #
-# Returns 0 if the file path matches any entry in the named allowlist.
+# Returns 0 if the file path matches any entry in the named allowlist,
+# using an anchored rule:
+#   - exact match                        (src/ai/gateway)
+#   - directory prefix with '/' boundary (src/ai/gateway/foo.ts)
+#   - file-extension append              (src/ai/gateway.ts)
+#   - nested occurrence                  (apps/api/src/ai/gateway/...)
+# Crucially: src/ai/gateway does NOT silently match
+# src/ai/gateway-bypass.ts — teams list full file paths or directory
+# entries to cover a whole area.
+#
 # Uses eval for bash 3.2 compatibility (see join_secret_re above).
 _is_gateway_allowed() {
-  local path="$1"
+  local path="${1#./}"
   local _arrname=$2
   eval "local _items=(\"\${${_arrname}[@]}\")"
   for entry in "${_items[@]}"; do
-    if [[ "$path" == *"$entry"* ]]; then
-      return 0
-    fi
+    local e="${entry%/}"
+    case "$path" in
+      "$e"|"$e"/*|"$e".*|*/"$e"|*/"$e"/*|*/"$e".*) return 0 ;;
+    esac
   done
   return 1
+}
+
+# build_exclude_regex <array-name>
+#
+# Prints an ERE alternation suitable for `grep -vE "(...)"` from the
+# named array. Path separators and regex metacharacters are escaped.
+build_exclude_regex() {
+  local _arrname=$1
+  eval "local _items=(\"\${${_arrname}[@]}\")"
+  local re="" item esc
+  for item in "${_items[@]}"; do
+    esc=$(printf '%s' "$item" | sed 's/[][\.^$*+?{}|()\\/]/\\&/g')
+    if [ -z "$re" ]; then re="$esc"; else re="$re|$esc"; fi
+  done
+  printf '%s' "$re"
+}
+
+# scan_staged_files <include-array> <exclude-array>
+#
+# Prints the list of files in the git index (added/copied/modified)
+# filtered to the named include-extension array and minus the named
+# exclude-path array. Empty output when not in a git work tree.
+scan_staged_files() {
+  local _incname=$1
+  local _excname=$2
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+  eval "local _includes=(\"\${${_incname}[@]}\")"
+  eval "local _excludes=(\"\${${_excname}[@]}\")"
+
+  local inc_re="" pat ext_pat
+  for pat in "${_includes[@]}"; do
+    ext_pat="${pat#\*}"
+    ext_pat=$(printf '%s' "$ext_pat" | sed 's/\./\\./g; s/\*/.\*/g')
+    if [ -z "$inc_re" ]; then inc_re="$ext_pat\$"; else inc_re="$inc_re|$ext_pat\$"; fi
+  done
+
+  local exc_re=""
+  for pat in "${_excludes[@]}"; do
+    local esc
+    esc=$(printf '%s' "$pat" | sed 's/[][\.^$*+?{}|()\\/]/\\&/g')
+    if [ -z "$exc_re" ]; then exc_re="$esc"; else exc_re="$exc_re|$esc"; fi
+  done
+
+  git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+    | grep -E "(${inc_re})" 2>/dev/null \
+    | { if [ -n "$exc_re" ]; then grep -vE "($exc_re)"; else cat; fi; } \
+    || true
 }
 
 # jsonl_append <file> <arg1> <arg2> ...
