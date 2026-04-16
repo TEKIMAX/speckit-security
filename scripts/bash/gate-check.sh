@@ -51,15 +51,17 @@ while IFS= read -r item; do
   [ -n "$item" ] && USER_GATEWAY_ALLOWLIST+=("$item")
 done < <(config_list "$CONFIG" "audit.allowlist.stack_direct_sdk")
 
+# Use ${arr[@]+"${arr[@]}"} to avoid "unbound variable" on bash 3.2
+# when the user arrays are empty (macOS ships bash 3.2 by default).
 INLINE_PROMPT_RE="$DEFAULT_INLINE_PROMPT_RE"
-for p in "${USER_INLINE_PROMPT_PATTERNS[@]}"; do
+for p in ${USER_INLINE_PROMPT_PATTERNS[@]+"${USER_INLINE_PROMPT_PATTERNS[@]}"}; do
   INLINE_PROMPT_RE="${INLINE_PROMPT_RE}|${p}"
 done
 
-SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" "${USER_SECRET_PATTERNS[@]}")
+SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" ${USER_SECRET_PATTERNS[@]+"${USER_SECRET_PATTERNS[@]}"})
 SECRET_RE=$(join_secret_re SECRET_PATTERNS)
 
-GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" "${USER_GATEWAY_ALLOWLIST[@]}")
+GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" ${USER_GATEWAY_ALLOWLIST[@]+"${USER_GATEWAY_ALLOWLIST[@]}"})
 is_gateway_allowed() {
   _is_gateway_allowed "$1" GATEWAY_ALLOWLIST
 }

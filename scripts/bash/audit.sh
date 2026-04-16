@@ -43,16 +43,18 @@ while IFS= read -r item; do
   [ -n "$item" ] && USER_INLINE_PROMPT_PATTERNS+=("$item")
 done < <(config_list "$CONFIG" "audit.inline_prompt_patterns")
 
-# Compose final pattern sets
-SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" "${USER_SECRET_PATTERNS[@]}")
-GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" "${USER_GATEWAY_ALLOWLIST[@]}")
+# Compose final pattern sets.
+# Use ${arr[@]+"${arr[@]}"} to avoid "unbound variable" on bash 3.2
+# when the user arrays are empty (macOS ships bash 3.2 by default).
+SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" ${USER_SECRET_PATTERNS[@]+"${USER_SECRET_PATTERNS[@]}"})
+GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" ${USER_GATEWAY_ALLOWLIST[@]+"${USER_GATEWAY_ALLOWLIST[@]}"})
 
 SECRET_RE=$(join_secret_re SECRET_PATTERNS)
 
 # Build the inline prompt regex. If the user supplied patterns, they
 # extend the default alternation.
 INLINE_PROMPT_RE="$DEFAULT_INLINE_PROMPT_RE"
-for p in "${USER_INLINE_PROMPT_PATTERNS[@]}"; do
+for p in ${USER_INLINE_PROMPT_PATTERNS[@]+"${USER_INLINE_PROMPT_PATTERNS[@]}"}; do
   INLINE_PROMPT_RE="${INLINE_PROMPT_RE}|${p}"
 done
 
