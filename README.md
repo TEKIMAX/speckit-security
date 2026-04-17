@@ -45,7 +45,7 @@ no model governance. In production AI systems, those are the gaps where
 compounding technical debt lives.
 
 `tekimax-security` plugs directly into Spec Kit's extension system and
-adds **six security gates** to the SDD lifecycle. Each gate is a
+adds **seven security gates** to the SDD lifecycle. Each gate is a
 command, backed by a template and a check script, that the AI agent
 follows automatically via Spec Kit hooks.
 
@@ -76,7 +76,7 @@ embedded in the system prompt as a grounding corpus, so answers
 come from the docs and cite page URLs. If something isn't in the
 docs, the model says so instead of guessing.
 
-Use it to learn the six gates, the five hooks, the eight
+Use it to learn the seven gates, the five hooks, the nine
 commands, the customization surface, or how spec-driven
 development fits together. It runs behind Cloudflare's native
 rate limiter (20 req / 60s per IP) and has no external
@@ -102,9 +102,9 @@ specify extension add --dev /path/to/speckit-security
 
 # 3. Verify
 specify extension list
-# → ✓ TEKIMAX Secure SDD (v0.3.0)
+# → ✓ TEKIMAX Secure SDD (v0.3.1)
 #       Security-first extension for Spec Kit
-#       Commands: 8 | Hooks: 5 | Status: Enabled
+#       Commands: 9 | Hooks: 5 | Status: Enabled
 ```
 
 ---
@@ -190,13 +190,24 @@ stack:
 ## Reference stack
 
 The extension is **vendor-agnostic** — it enforces the *existence*
-of security controls, not specific vendor choices. The current gate
-defaults are **TypeScript/Node-opinionated**: Gate A looks for
-`src/schemas/<slug>.ts` (Zod), and `audit.sh`'s direct-SDK check
-greps for `@google/genai`, `@anthropic-ai/sdk`, and `openai`. You
-can extend the secret patterns, inline-prompt patterns, and gateway
-allowlist via `tekimax-security-config.yml` (v0.2.5+); the scripts
-read user entries as additive extensions of the built-in defaults.
+of security controls, not specific vendor choices. Gate A is
+TypeScript-opinionated (looks for `src/schemas/<slug>.ts` — Zod by
+default), but Gate F (inline-content scan) is **polyglot** from
+v0.3.1 onward: TS/JS/Py/Go/Rust/Ruby/Java/Kotlin/Swift/PHP/Sh/
+YAML/JSON/TOML/Terraform/Markdown by default. The direct-SDK check
+ships a default list of `@google/genai`, `@anthropic-ai/sdk`,
+`openai`, `cohere-ai`, `@mistralai/mistralai`,
+`@aws-sdk/client-bedrock-runtime`, `replicate`, `together-ai`, and
+is extensible via `audit.direct_sdk_patterns`. All list-valued
+config keys are **additive**: user entries extend built-in defaults
+instead of replacing them. Keys available in v0.3.1:
+
+- `audit.inline_prompt_patterns`, `audit.secret_patterns`
+- `audit.allowlist.stack_direct_sdk` (anchored path matching)
+- `audit.include_globs`, `audit.exclude_paths`
+- `audit.direct_sdk_patterns`
+- `dep_audit.enabled`, `dep_audit.fail_on`
+- `red_team.staging_url`, `red_team.max_rps`, `red_team.never_run_against`
 
 Common categories you'll need to fill in:
 
@@ -243,6 +254,7 @@ Together, they compound quality instead of debt.
 - [x] **v0.2.5** — Config read-back for audit and gate-check (user entries extend built-ins for secret patterns, inline-prompt patterns, and allowlist)
 - [x] **v0.2.6** — Docs chat (Ask AI) grounded in the full docs corpus, powered by Llama 3.3 70B on Cloudflare Workers AI, with native Cloudflare rate limiting
 - [x] **v0.3.0** — Security hardening: project-root confinement, JSONL injection prevention, hash-chain tamper detection, Gate B/D validation improvements, guardrail completeness audit, ShellCheck enforcing in CI, new Security Model docs page
+- [x] **v0.3.1** — Gate G (dependency CVEs via osv-scanner / pnpm / npm / yarn); polyglot inline-content scan; anchored gateway allowlist; `--staged-only` and `--json` flags; recursive `.env` detection; extensible `audit.include_globs` / `audit.exclude_paths` / `audit.direct_sdk_patterns`
 - [x] **Spec Kit community catalog submission** ([PR #2215](https://github.com/github/spec-kit/pull/2215))
 - [ ] Formal plugin system for custom gates and audit checks
 - [ ] GitHub Actions workflow template for running gate-check in CI
