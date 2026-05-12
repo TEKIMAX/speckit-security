@@ -13,6 +13,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/config.sh"
 # shellcheck source=lib/defaults.sh
 source "$SCRIPT_DIR/lib/defaults.sh"
+# shellcheck source=lib/scan.sh
+source "$SCRIPT_DIR/lib/scan.sh"
+# shellcheck source=lib/gates.sh
+source "$SCRIPT_DIR/lib/gates.sh"
+
+# --- arg parsing ----------------------------------------------------
 
 SPEC_PATH=""
 STAGED_ONLY=0
@@ -30,8 +36,6 @@ if [ -z "$SPEC_PATH" ] || [ ! -f "$SPEC_PATH" ]; then
   echo "error: spec path missing or not a file: $SPEC_PATH" >&2
   exit 2
 fi
-# Confine spec reads to the project directory — prevents path
-# traversal via "../..", symlinks, or absolute paths.
 require_inside_project "$SPEC_PATH" "spec path"
 
 EXT_DIR=".specify/extensions/tekimax-security"
@@ -40,40 +44,33 @@ LOG_DIR=".tekimax-security"
 GATE_LOG="$LOG_DIR/gate-log.jsonl"
 mkdir -p "$LOG_DIR"
 
-# --- Config-driven pattern sets (Gate F) ----------------------------
+# --- merge config-driven pattern sets with built-in defaults --------
 #
-# Built-in defaults live in lib/defaults.sh (single source of truth).
-# Gate F's inline-prompt and secret checks read their patterns from
-# the project config with built-in fallbacks. See docs/customization
-# for the config schema.
+# Built-in defaults live in lib/defaults.sh. User entries extend (not
+# replace) them — see docs/CUSTOMIZATION.md. Use ${arr[@]+"${arr[@]}"}
+# everywhere to avoid "unbound variable" errors on bash 3.2 (macOS)
+# when a user array is empty.
 
 USER_INLINE_PROMPT_PATTERNS=()
-while IFS= read -r item; do
-  [ -n "$item" ] && USER_INLINE_PROMPT_PATTERNS+=("$item")
-done < <(config_list "$CONFIG" "audit.inline_prompt_patterns")
+while IFS= read -r item; do [ -n "$item" ] && USER_INLINE_PROMPT_PATTERNS+=("$item"); done \
+  < <(config_list "$CONFIG" "audit.inline_prompt_patterns")
 
 USER_SECRET_PATTERNS=()
-while IFS= read -r item; do
-  [ -n "$item" ] && USER_SECRET_PATTERNS+=("$item")
-done < <(config_list "$CONFIG" "audit.secret_patterns")
+while IFS= read -r item; do [ -n "$item" ] && USER_SECRET_PATTERNS+=("$item"); done \
+  < <(config_list "$CONFIG" "audit.secret_patterns")
 
 USER_GATEWAY_ALLOWLIST=()
-while IFS= read -r item; do
-  [ -n "$item" ] && USER_GATEWAY_ALLOWLIST+=("$item")
-done < <(config_list "$CONFIG" "audit.allowlist.stack_direct_sdk")
+while IFS= read -r item; do [ -n "$item" ] && USER_GATEWAY_ALLOWLIST+=("$item"); done \
+  < <(config_list "$CONFIG" "audit.allowlist.stack_direct_sdk")
 
 USER_INCLUDE_GLOBS=()
-while IFS= read -r item; do
-  [ -n "$item" ] && USER_INCLUDE_GLOBS+=("$item")
-done < <(config_list "$CONFIG" "audit.include_globs")
+while IFS= read -r item; do [ -n "$item" ] && USER_INCLUDE_GLOBS+=("$item"); done \
+  < <(config_list "$CONFIG" "audit.include_globs")
 
 USER_EXCLUDE_PATHS=()
-while IFS= read -r item; do
-  [ -n "$item" ] && USER_EXCLUDE_PATHS+=("$item")
-done < <(config_list "$CONFIG" "audit.exclude_paths")
+while IFS= read -r item; do [ -n "$item" ] && USER_EXCLUDE_PATHS+=("$item"); done \
+  < <(config_list "$CONFIG" "audit.exclude_paths")
 
-# Use ${arr[@]+"${arr[@]}"} to avoid "unbound variable" on bash 3.2
-# when the user arrays are empty (macOS ships bash 3.2 by default).
 INLINE_PROMPT_RE="$DEFAULT_INLINE_PROMPT_RE"
 for p in ${USER_INLINE_PROMPT_PATTERNS[@]+"${USER_INLINE_PROMPT_PATTERNS[@]}"}; do
   INLINE_PROMPT_RE="${INLINE_PROMPT_RE}|${p}"
@@ -83,10 +80,6 @@ SECRET_PATTERNS=("${DEFAULT_SECRET_PATTERNS[@]}" ${USER_SECRET_PATTERNS[@]+"${US
 SECRET_RE=$(join_secret_re SECRET_PATTERNS)
 
 GATEWAY_ALLOWLIST=("${DEFAULT_GATEWAY_ALLOWLIST[@]}" ${USER_GATEWAY_ALLOWLIST[@]+"${USER_GATEWAY_ALLOWLIST[@]}"})
-is_gateway_allowed() {
-  _is_gateway_allowed "$1" GATEWAY_ALLOWLIST
-}
-
 INCLUDE_EXTS=("${DEFAULT_INCLUDE_EXTS[@]}" ${USER_INCLUDE_GLOBS[@]+"${USER_INCLUDE_GLOBS[@]}"})
 EXCLUDE_PATTERNS=("${DEFAULT_EXCLUDE_PATTERNS[@]}" ${USER_EXCLUDE_PATHS[@]+"${USER_EXCLUDE_PATHS[@]}"})
 
@@ -95,231 +88,33 @@ for ext in "${INCLUDE_EXTS[@]}"; do INCLUDE_ARGS+=("--include=$ext"); done
 INCLUDE_ARGS+=("--include=*.env*")
 EXCLUDE_RE=$(build_exclude_regex EXCLUDE_PATTERNS)
 
+STAGED_LIST=""
+if [ "$STAGED_ONLY" = "1" ]; then
+  STAGED_LIST=$(scan_staged_files INCLUDE_EXTS EXCLUDE_PATTERNS)
+fi
+
+# --- run gates ------------------------------------------------------
+
 SPEC_ID=$(basename "$SPEC_PATH" .md | grep -oE '^(F|SEC|ADR|INT)-[0-9]+' || echo "UNKNOWN")
 SPEC_SLUG=$(basename "$SPEC_PATH" .md | sed -E 's/^(F|SEC|ADR|INT)-[0-9]+-//')
 
+G_A=$(check_gate_a "$SPEC_PATH" "$SPEC_SLUG")
+G_B=$(check_gate_b "$SPEC_PATH")
+G_C=$(check_gate_c "$SPEC_PATH")
+G_D=$(check_gate_d "$SPEC_SLUG" "$G_C")
+G_E=$(check_gate_e "$SPEC_SLUG")
+G_F=$(check_gate_f "$STAGED_ONLY")
+G_G=$(check_gate_g "$SCRIPT_DIR" "$CONFIG")
+
 FAIL=0
-SKIP=0
+for v in "$G_A" "$G_B" "$G_C" "$G_D" "$G_E" "$G_F" "$G_G"; do
+  [ "${v%%:*}" = "fail" ] && FAIL=1
+done
 
-# Gate results stored as individual variables so the script works on
-# bash 3.2 (macOS default, no `declare -A`). Access via `${!varname}`
-# indirect expansion in the reporting loop below.
-G_A=""
-G_B=""
-G_C=""
-G_D=""
-G_E=""
-G_F=""
-G_G=""
+# --- report ---------------------------------------------------------
 
-check_section() {
-  local heading="$1"
-  if grep -qF "$heading" "$SPEC_PATH"; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# Gate A — Data Contract
-if check_section "## 2. Data Contract" || check_section "## Data Contract"; then
-  if [ -f "src/schemas/${SPEC_SLUG}.ts" ]; then
-    if grep -q "z\.any()" "src/schemas/${SPEC_SLUG}.ts"; then
-      G_A="fail: z.any() in schema"
-      FAIL=1
-    else
-      G_A="pass"
-    fi
-  else
-    G_A="fail: missing src/schemas/${SPEC_SLUG}.ts"
-    FAIL=1
-  fi
-else
-  G_A="fail: missing Data Contract section"
-  FAIL=1
-fi
-
-# Gate B — Threat Model
-# Verify the STRIDE table has actual content rows, not just a heading
-# with an empty table.
-if check_section "## Security / Threat Model" || { check_section "## Security" && grep -qi "STRIDE\|Spoofing" "$SPEC_PATH"; }; then
-  if grep -q '\[UNMITIGATED\].*\(High\|Critical\)' "$SPEC_PATH"; then
-    G_B="fail: High/Critical unmitigated threats"
-    FAIL=1
-  elif ! grep -qE '^\|[[:space:]]*T[0-9]' "$SPEC_PATH" && \
-       ! grep -qE '^\|[[:space:]]*(Spoofing|Tampering|Repudiation|Info|Denial|Elevation)' "$SPEC_PATH"; then
-    G_B="fail: STRIDE table has no threat rows"
-    FAIL=1
-  else
-    G_B="pass"
-  fi
-else
-  G_B="fail: missing threat model"
-  FAIL=1
-fi
-
-# Gate C — Model Governance (AI features only)
-if grep -qi "AI Integration\|model:" "$SPEC_PATH"; then
-  if grep -qE 'latest|"stable"' "$SPEC_PATH"; then
-    G_C="fail: unpinned model version"
-    FAIL=1
-  elif ! grep -qi "Rollback" "$SPEC_PATH"; then
-    G_C="fail: missing rollback plan"
-    FAIL=1
-  else
-    G_C="pass"
-  fi
-else
-  G_C="skip: no AI integration"
-  SKIP=1
-fi
-
-# Gate D — Guardrails (AI features only)
-# Verify rate limit and cost ceiling are present and numeric, not
-# just that patterns exist.
-if [ "$G_C" != "skip: no AI integration" ]; then
-  GUARDRAIL_FILE="prompts/guardrails/${SPEC_SLUG}.yml"
-  if [ -f "$GUARDRAIL_FILE" ] && [ -f "prompts/system/${SPEC_SLUG}.md" ]; then
-    if ! grep -q "blocked_patterns:" "$GUARDRAIL_FILE" || \
-       ! grep -q "redact_patterns:" "$GUARDRAIL_FILE"; then
-      G_D="fail: guardrail missing blocked/redact patterns"
-      FAIL=1
-    elif ! grep -qE "rate_per_user_per_minute:[[:space:]]*[0-9]" "$GUARDRAIL_FILE"; then
-      G_D="fail: rate_per_user_per_minute missing or not numeric"
-      FAIL=1
-    elif ! grep -qE "cost_ceiling_usd_per_day:[[:space:]]*[0-9]" "$GUARDRAIL_FILE"; then
-      G_D="fail: cost_ceiling_usd_per_day missing or not numeric"
-      FAIL=1
-    else
-      G_D="pass"
-    fi
-  else
-    G_D="fail: missing prompt or guardrail files"
-    FAIL=1
-  fi
-else
-  G_D="skip: no AI integration"
-fi
-
-# Gate E — Red Team (optional; required before ship)
-if ls red-team/RT-*-"${SPEC_SLUG}".md >/dev/null 2>&1; then
-  G_E="pass"
-else
-  G_E="skip: no red-team report (required before ship)"
-  SKIP=1
-fi
-
-# Gate F — Inline Content Scan (polyglot).
-INLINE_HIT=0
-SECRET_HIT=0
-ENV_COMMITTED=0
-
-if [ "$STAGED_ONLY" = "1" ]; then
-  STAGED_FILES=$(scan_staged_files INCLUDE_EXTS EXCLUDE_PATTERNS)
-  if [ -n "$STAGED_FILES" ]; then
-    while IFS= read -r f; do
-      [ -z "$f" ] && continue
-      [ -f "$f" ] || continue
-      if ! is_gateway_allowed "$f"; then
-        if grep -liE "$INLINE_PROMPT_RE" "$f" >/dev/null 2>&1; then
-          INLINE_HIT=1
-        fi
-      fi
-      if grep -lE "($SECRET_RE)" "$f" >/dev/null 2>&1; then
-        SECRET_HIT=1
-      fi
-    done <<< "$STAGED_FILES"
-  fi
-else
-  if [ -d src ]; then
-    raw_hits=$(grep -rIliE "$INLINE_PROMPT_RE" "${INCLUDE_ARGS[@]}" src 2>/dev/null || true)
-    while IFS= read -r f; do
-      [ -z "$f" ] && continue
-      if ! is_gateway_allowed "$f"; then
-        INLINE_HIT=1
-        break
-      fi
-    done <<< "$raw_hits"
-  fi
-  if grep -rIl -E "($SECRET_RE)" "${INCLUDE_ARGS[@]}" . 2>/dev/null \
-       | { if [ -n "$EXCLUDE_RE" ]; then grep -vE "($EXCLUDE_RE)"; else cat; fi; } \
-       | grep -q .; then
-    SECRET_HIT=1
-  fi
-fi
-
-# Recursive .env detection. .env.example / .sample / .template remain
-# documentation and are not flagged.
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  if git ls-files 2>/dev/null \
-       | grep -E '(^|/)\.env($|\.)' \
-       | grep -vE '\.env\.(example|sample|template)$' \
-       | grep -q .; then
-    ENV_COMMITTED=1
-  fi
-fi
-
-if [ $INLINE_HIT -eq 0 ] && [ $SECRET_HIT -eq 0 ] && [ $ENV_COMMITTED -eq 0 ]; then
-  G_F="pass"
-else
-  msgs=""
-  [ $INLINE_HIT -eq 1 ] && msgs="${msgs}inline-prompts "
-  [ $SECRET_HIT -eq 1 ] && msgs="${msgs}committed-secrets "
-  [ $ENV_COMMITTED -eq 1 ] && msgs="${msgs}.env-committed "
-  G_F="fail: ${msgs}"
-  FAIL=1
-fi
-
-# Gate G — Dependency CVEs. Runs dep-audit.sh when available and
-# enabled; skips cleanly when no scanner is installed or config
-# opts out.
-DEP_ENABLED=$(config_get "$CONFIG" "dep_audit.enabled" 2>/dev/null || true)
-[ -z "$DEP_ENABLED" ] && DEP_ENABLED="true"
-if [ "$DEP_ENABLED" = "false" ]; then
-  G_G="skip: disabled via config"
-  SKIP=1
-elif [ -x "$SCRIPT_DIR/dep-audit.sh" ]; then
-  DEP_OUT=$("$SCRIPT_DIR/dep-audit.sh" 2>&1 || true)
-  case "$DEP_OUT" in
-    *"VERDICT: PASS"*)  G_G="pass" ;;
-    *"VERDICT: BLOCK"*) G_G="fail: vulnerable deps at/above threshold"; FAIL=1 ;;
-    *)                  G_G="skip: no scanner available"; SKIP=1 ;;
-  esac
-else
-  G_G="skip: dep-audit.sh not installed"
-  SKIP=1
-fi
-
-# Report (human)
 if [ "$EMIT_JSON" = "0" ]; then
-  echo
-  echo "┌─────────────────────────────────────────────────┐"
-  printf "│ Security Gate Check — %-26s │\n" "$SPEC_ID"
-  echo "├─────────────────────────────────────────────────┤"
-  for key in A B C D E F G; do
-    label=""
-    case $key in
-      A) label="Gate A — Data Contract" ;;
-      B) label="Gate B — Threat Model" ;;
-      C) label="Gate C — Model Governance" ;;
-      D) label="Gate D — Guardrails" ;;
-      E) label="Gate E — Red Team" ;;
-      F) label="Gate F — Inline Content Scan" ;;
-      G) label="Gate G — Dependency CVEs" ;;
-    esac
-    varname="G_$key"
-    status="${!varname}"
-    icon="✅"
-    case "$status" in
-      fail:*) icon="❌" ;;
-      skip:*) icon="⚠ " ;;
-    esac
-    printf "│ %-30s %s  %-9s │\n" "$label" "$icon" "${status%%:*}"
-    if [ "${status%%:*}" = "fail" ] || [ "${status%%:*}" = "skip" ]; then
-      printf "│   %-45s │\n" "${status#*: }"
-    fi
-  done
-  echo "└─────────────────────────────────────────────────┘"
+  render_gate_box "$SPEC_ID" "$G_A" "$G_B" "$G_C" "$G_D" "$G_E" "$G_F" "$G_G"
 fi
 
 if [ $FAIL -eq 1 ]; then
@@ -338,9 +133,8 @@ else
   echo "VERDICT: $VERDICT"
 fi
 
-# Append to gate log (JSONL) — uses jsonl_append_chained for
-# tamper-evident hash chain (each line includes the SHA-256 of the
-# previous line).
+# --- audit-trail append (hash-chained) ------------------------------
+
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER=$(git config user.name 2>/dev/null || echo "unknown")
 PHASE="${SPECKIT_PHASE:-before_implement}"
@@ -358,8 +152,4 @@ jsonl_append_chained "$GATE_LOG" \
   "gates.F" "${G_F%%:*}" \
   "gates.G" "${G_G%%:*}"
 
-if [ "$VERDICT" = "PASS" ]; then
-  exit 0
-else
-  exit 1
-fi
+[ "$VERDICT" = "PASS" ] && exit 0 || exit 1
