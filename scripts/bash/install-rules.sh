@@ -13,16 +13,15 @@
 #
 # Exits: 0 on success, 1 on intended failure, 2 on error.
 # Reads: .specify/init-options.json (for agent detection)
-#        .specify/extensions/tekimax-security/templates/development-rules.md
+#        .specify/extensions/tekimax-security/templates/rules/*.md
 # Writes: see targets above.
 
 set -euo pipefail
 
-# Source the shared library for require_inside_project.
-# install-rules.sh is in scripts/bash/, lib is scripts/bash/lib/.
+# install-rules.sh needs only path confinement from the shared lib.
 _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=lib/defaults.sh
-source "$_SCRIPT_DIR/lib/defaults.sh"
+# shellcheck source=lib/path.sh
+source "$_SCRIPT_DIR/lib/path.sh"
 
 # --- arg parsing -----------------------------------------------------
 
@@ -51,26 +50,34 @@ done
 # this, `--docs /etc/crontab` would write outside the project.
 require_inside_project "$docs_path" "--docs path"
 
-# --- locate the extension install dir -------------------------------
+# --- locate the rules fragment dir ----------------------------------
 #
-# When installed via `specify extension add`, templates live under
-# .specify/extensions/tekimax-security/templates/. Running from the
-# source repo during development, templates live under the repo's
-# templates/ directory.
+# When installed via `specify extension add`, fragments live under
+# .specify/extensions/tekimax-security/templates/rules/. From a source
+# checkout, fragments live at ../../templates/rules/ relative to this
+# script. Each fragment is < 200 lines (rule §4); assembled output is
+# the full DEVELOPMENT-RULES.md.
 
 ext_dir=".specify/extensions/tekimax-security"
-if [ -d "$ext_dir/templates" ]; then
-  template_source="$ext_dir/templates/development-rules.md"
+if [ -d "$ext_dir/templates/rules" ]; then
+  rules_dir="$ext_dir/templates/rules"
 else
-  # Dev-mode fallback: script lives in scripts/bash/, templates in ../../templates/
-  script_dir="$(cd "$(dirname "$0")" && pwd)"
-  template_source="$script_dir/../../templates/development-rules.md"
+  rules_dir="$_SCRIPT_DIR/../../templates/rules"
 fi
 
-if [ ! -f "$template_source" ]; then
-  echo "error: template not found at $template_source" >&2
+if [ ! -d "$rules_dir" ]; then
+  echo "error: rules fragment directory not found at $rules_dir" >&2
   exit 2
 fi
+
+assemble_rules() {
+  # Concatenate fragments in sorted order (numeric prefix gives order).
+  # Each fragment ends with its own '---' separator, so no glue needed.
+  while IFS= read -r fragment; do
+    cat "$fragment"
+    printf '\n'
+  done < <(find "$rules_dir" -maxdepth 1 -name '*.md' -type f | sort)
+}
 
 # --- project name detection -----------------------------------------
 
@@ -206,7 +213,7 @@ if [ -f "$docs_path" ] && [ $force -eq 0 ]; then
   docs_backup=$(backup_if_exists "$docs_path")
 fi
 
-template_content=$(cat "$template_source")
+template_content=$(assemble_rules)
 rendered=$(substitute_project_name "$template_content")
 printf '%s\n' "$rendered" > "$docs_path"
 

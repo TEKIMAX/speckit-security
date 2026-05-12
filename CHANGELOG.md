@@ -3,6 +3,60 @@
 All notable changes to `tekimax-security` will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- **Length-rules compliance refactor.** Brought the four files that
+  violated DEVELOPMENT-RULES §4 back under their target/ceiling
+  without changing behavior:
+  - `gate-check.sh` 365 → 155 lines (under 200 target). Each gate
+    A–G extracted to `lib/gates.sh` as a pure
+    `check_gate_<x> → "pass" | "fail: <reason>" | "skip: <reason>"`
+    function, plus a `render_gate_box` reporter. Orchestrator now
+    just collects verdicts and renders.
+  - `audit.sh` 277 → 233 lines. The polyglot inline-prompt, secret,
+    and `.env` scans are now shared with Gate F via `lib/scan.sh`.
+  - `lib/defaults.sh` 305 → 192 lines. Path confinement split out
+    to `lib/path.sh`, JSONL writers split out to `lib/jsonl.sh`.
+    `defaults.sh` keeps only pattern constants and the helpers that
+    operate on them, and re-sources path/jsonl so existing callers
+    don't need to update their `source` lines.
+  - `templates/development-rules.md` 367 → 10 fragments under
+    `templates/rules/` (largest 61 lines, all under the 100-line
+    template target). `install-rules.sh` assembles them in sorted
+    order at install time. Users see the same single
+    `docs/DEVELOPMENT-RULES.md`.
+
+### Added
+
+- **`lib/path.sh`** — `require_inside_project` extracted from
+  `defaults.sh` so any script can opt into path-confinement without
+  pulling in pattern defaults.
+- **`lib/jsonl.sh`** — `jsonl_append` and `jsonl_append_chained`
+  extracted so dep-audit, red-team, and audit-trail writers don't
+  need to load Gate F pattern arrays.
+- **`lib/scan.sh`** — `scan_inline_prompts`, `scan_secrets`,
+  `scan_env_files`. Same scan logic Gate F and the post-implement
+  audit used to duplicate.
+- **`lib/gates.sh`** — `check_gate_a`..`check_gate_g`,
+  `has_section`, `render_gate_box`. Pure functions returning their
+  verdict string; gate-check.sh orchestrates and writes the log.
+- **Four new tests** (22/22 passing, up from 18):
+  - `tests/lib-unit/path-confinement.sh` — proves
+    `require_inside_project` accepts in-tree paths and exits 2 on
+    traversal.
+  - `tests/lib-unit/jsonl-writers.sh` — proves `jsonl_append`
+    emits valid JSON with dotted-key nesting and
+    `jsonl_append_chained` links each entry's `prev_hash` to the
+    SHA-256 of the previous line.
+  - `tests/lib-unit/gates-callable.sh` — each `check_gate_<x>` is
+    callable in isolation against a fixture and returns the
+    expected verdict string.
+  - `tests/install-rules/assembles-fragments-in-order.sh` — proves
+    the new fragment assembler concatenates `00-intro.md` through
+    `09-review.md` in numeric order.
+
 ## [0.3.1] — 2026-04-16
 
 ### Added
